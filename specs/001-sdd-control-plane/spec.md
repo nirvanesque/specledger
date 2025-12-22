@@ -9,69 +9,117 @@
 
 ### User Story 1 - Capture and Version Specifications (Priority: P1)
 
-Development teams need to capture user requirements, functional specifications, and clarifications in a structured, version-controlled format. Team members and LLM agents collaborate to refine specifications through iterative Q&A sessions, ensuring all stakeholders have a shared understanding before implementation begins.
+Development teams need to capture user requirements, functional specifications, and clarifications in a structured, version-controlled format. Team members and LLM agents collaborate using `/speckit.specify` to create specifications and `/speckit.clarify` to refine them through iterative Q&A sessions, ensuring all stakeholders have a shared understanding before implementation begins.
+
+**Generated Artifacts**:
+- `specs/<NNN>-<feature-name>/spec.md` - Feature specification with user stories, functional requirements, success criteria
+- `specs/<NNN>-<feature-name>/checklists/requirements.md` - Quality validation checklist
+- `## Clarifications` section with `### Session YYYY-MM-DD` subheadings tracking Q&A history
 
 **Why this priority**: This is the foundation of the entire SDD workflow. Without structured specifications, all downstream activities (planning, task generation, implementation) lack a reliable source of truth. This delivers immediate value by centralizing requirement gathering and eliminating ambiguity.
 
-**Independent Test**: Can be fully tested by creating a new specification document, adding clarification questions and answers, versioning the changes, and retrieving the specification history. Delivers value by providing a single source of truth for requirements.
+**Independent Test**: Can be fully tested by invoking `/speckit.specify` to create a specification, then `/speckit.clarify` to add clarification questions and answers, and verifying the changes are versioned in the control plane. Delivers value by providing a single source of truth for requirements.
 
 **Acceptance Scenarios**:
 
-1. **Given** a team wants to start a new feature, **When** they create a specification with user stories and functional requirements, **Then** the specification is stored in the control plane with a unique identifier and timestamp
-2. **Given** an existing specification has unclear requirements, **When** team members or LLM agents add clarification questions and answers, **Then** the Q&A is linked to the specific requirement and versioned
-3. **Given** a specification has been modified multiple times, **When** a user requests the version history, **Then** they see all changes with timestamps, authors (human or LLM), and can view or restore any previous version
-4. **Given** multiple team members are collaborating on a specification, **When** they make concurrent edits, **Then** the system tracks all changes and provides conflict resolution mechanisms
+1. **Given** a team wants to start a new feature, **When** they invoke `/speckit.specify` with a feature description, **Then** the system creates a numbered feature branch (e.g., `001-feature-name`), generates `spec.md` with user stories and functional requirements, and stores it in the control plane
+2. **Given** an existing specification has ambiguous requirements, **When** team members invoke `/speckit.clarify`, **Then** the system scans for ambiguities across taxonomy categories (Functional Scope, Domain Model, Non-Functional, etc.), asks up to 10 targeted questions, and records answers in a `## Clarifications` section with session timestamps
+3. **Given** a specification has been modified multiple times, **When** a user requests the version history, **Then** they see all changes with timestamps, authors (human or LLM agent), and can view or restore any previous version
+4. **Given** multiple team members are collaborating on a specification, **When** they make concurrent edits, **Then** the system tracks all changes using Git-style merge with conflict markers
+
+**Follow up Questions**:
+
+- [vincent]: Do specs live in-repo on filesystem per feature-name directories still or do we leverage the control plane to keep track and link one feature to many branches?
+- [vincent]: What is the checkpoint system, does it just capture document versions out of git? (consider how a CMS has a version history per document and how it relates to git versioning? Do we snapshot a document on every LLM file-edit decoupled from git commits completely? this seems to be what Kiro does? See also the Claude's `/home/vincent/.claude/file-history` )
 
 ---
 
 ### User Story 2 - Track Implementation Planning and Research (Priority: P2)
 
-Once specifications are defined, technical leads and LLM agents need to explore implementation approaches, document technical alternatives, evaluate tradeoffs, and capture decisions about technology choices and architectural patterns. This research and planning must be linked to the originating specification.
+Once specifications are defined, technical leads and LLM agents invoke `/speckit.plan` to explore implementation approaches, document technical alternatives, evaluate tradeoffs, and capture decisions about technology choices and architectural patterns. The planning workflow executes in phases, generating design artifacts linked to the originating specification.
+
+**Generated Artifacts**:
+- `specs/<NNN>-<feature-name>/plan.md` - Implementation plan with technical context, constitution checks, and phase gates
+- `specs/<NNN>-<feature-name>/research.md` - Research findings with Decision/Rationale/Alternatives format
+- `specs/<NNN>-<feature-name>/data-model.md` - Entity definitions, fields, relationships, validation rules
+- `specs/<NNN>-<feature-name>/contracts/` - API contracts (Proto/OpenAPI schemas)
+- `specs/<NNN>-<feature-name>/quickstart.md` - Test scenarios and getting-started examples
 
 **Why this priority**: Planning bridges the gap between requirements and execution. Without documented alternatives and tradeoffs, teams lose the reasoning behind technical decisions, making future maintenance and adaptation difficult. This builds on P1 by adding the "how" layer to the "what" layer.
 
-**Independent Test**: Can be tested by creating a planning document for an existing specification, documenting multiple technical approaches with tradeoffs, selecting an approach, and verifying the plan is linked to the specification. Delivers value by preserving technical decision-making rationale.
+**Independent Test**: Can be fully tested by invoking `/speckit.plan` on a completed specification, verifying that research.md resolves all unknowns, data-model.md captures entities, and contracts/ defines API schemas. Delivers value by preserving technical decision-making rationale.
 
 **Acceptance Scenarios**:
 
-1. **Given** a completed specification, **When** a technical lead creates an implementation plan, **Then** the plan is linked to the specification and includes sections for alternatives, tradeoffs, and final decisions
-2. **Given** an implementation plan is being developed, **When** LLM agents research technical approaches, **Then** each alternative is documented with pros, cons, and contextual factors
-3. **Given** multiple implementation approaches exist, **When** the team selects one approach, **Then** the decision is recorded with justification and alternative approaches remain visible for future reference
-4. **Given** planning includes external research, **When** team members add references to documentation or examples, **Then** these resources are captured and linked to relevant planning sections
+1. **Given** a completed specification, **When** a technical lead invokes `/speckit.plan`, **Then** the system executes Phase 0 (research) to resolve all "NEEDS CLARIFICATION" items and generates `research.md` with Decision/Rationale/Alternatives for each unknown
+2. **Given** Phase 0 research is complete, **When** the system executes Phase 1 (design), **Then** it generates `data-model.md` (entities from spec), `contracts/` (API schemas from functional requirements), and `quickstart.md` (test scenarios)
+3. **Given** a project constitution exists, **When** the plan is generated, **Then** the system validates against constitution gates and errors if violations are unjustified
+4. **Given** planning includes external research, **When** LLM agents search for best practices, **Then** findings are consolidated in `research.md` with references to documentation and patterns
+
+**Follow up Questions**:
+
+- [vincent]: What does it mean to "invoke" the commands if there's a remote component? Currently speckit is just prepared prompts for the user preferred CLI and LLM Model, the output is files on disks or issues created in the issue tracker... This means that SpecLedger provides a "bootstrap" system to set up the filesystem for the preferred Agent Shell - see [specify-cli](https://github.com/github/spec-kit/blob/v0.0.90/src/specify_cli/__init__.py#L637-L749). SpecLedger pulls templates from the control plane, customer can easily fork and customise these templates.. the system must provide a way for customers to keep their own customizations in-line with upstream prompt improvements... - prompts must evolve to be LLM / Agent Shell specific (see Conductor prompts vs SpecKit prompts)... - this is a separate future feature of prompt management, first version can just pull default set of prompts for Claude Code only.
+- [vincent]: SpecLedger should come with a CLI similar to [steveyegge/beads](https://github.com/steveyegge/beads) - perhaps backed by SQLite with background sync to the platform? Including "SKILLS" or "POWERS" tuned for the target Agent shell to allow them to use these custom CLI to the best of their capabilities (Does this include Agent Shell hooks such as deterministic issue platform commands? Does this include pulling down prompt templates and create issue tracking tasks?)
 
 ---
 
 ### User Story 3 - Generate and Manage Task Dependency Graphs (Priority: P3)
 
-Based on specifications and plans, teams need to break down work into granular tasks organized by phases, with clear dependencies between tasks and across phases. The task graph provides a roadmap showing what can be parallelized and what must be sequential.
+Based on specifications and plans, teams invoke `/speckit.tasks` to break down work into granular tasks organized by user story phases. The system uses the Beads issue tracker (`bd` CLI) to create epics, features, and tasks with dependency relationships, labels for traceability, and priority ordering.
+
+**Generated Artifacts**:
+- `specs/<NNN>-<feature-name>/tasks.md` - Task index with Beads queries, MVP scope, and phase structure
+- Beads issues: Epic (top-level), Features (per phase), Tasks (granular work units)
+- Labels: `spec:<slug>`, `phase:<name>`, `story:US1`, `component:<area>`, `requirement:FR-001`
+
+**Issue Hierarchy**:
+- **Epic**: Top-level feature container (e.g., `sl-0001`)
+- **Feature**: Phase grouping (Setup, Foundational, US1, US2, Polish)
+- **Task**: Individual work unit with description, design notes, acceptance criteria
 
 **Why this priority**: Task graphs translate plans into executable work units. This enables parallel work streams and helps teams understand critical paths. While important, teams can manually create task lists initially, making this lower priority than core specification and planning capabilities.
 
-**Independent Test**: Can be tested by generating a task graph from an existing plan, verifying task dependencies are correctly represented, updating task status, and confirming dependent tasks are appropriately blocked. Delivers value by providing a clear execution roadmap.
+**Independent Test**: Can be fully tested by invoking `/speckit.tasks` on a completed plan, verifying Beads issues are created with correct parent-child relationships, and using `bd ready` to find unblocked tasks. Delivers value by providing a clear execution roadmap.
 
 **Acceptance Scenarios**:
 
-1. **Given** a completed implementation plan, **When** a task graph is generated, **Then** tasks are organized into logical phases with dependencies clearly marked
-2. **Given** a task graph with dependencies, **When** a task is marked complete, **Then** dependent tasks are automatically unblocked and marked ready for work
-3. **Given** tasks across multiple phases, **When** viewing the dependency graph, **Then** cross-phase dependencies are visible and properly sequenced
-4. **Given** a complex feature with many tasks, **When** team members filter by phase or priority, **Then** they see only relevant tasks while maintaining dependency context
+1. **Given** a completed implementation plan, **When** a team invokes `/speckit.tasks`, **Then** the system creates a Beads epic with features per phase (Setup, Foundational, US1, US2, etc.) and tasks with `--deps parent-child:<id>` relationships
+2. **Given** tasks have dependencies, **When** a task is marked complete via `bd close`, **Then** `bd ready` shows dependent tasks as unblocked and available for work
+3. **Given** tasks span multiple user stories, **When** querying with `bd list --label "story:US1"`, **Then** only tasks for that story are returned with their dependency context preserved
+4. **Given** a complex feature with many tasks, **When** filtering with `bd list --label "phase:setup" --limit 10`, **Then** relevant tasks are returned with priority ordering and file paths for implementation
+
+**Follow up Questions**:
+
+- [vincent]: Beads is just an example tracker customized for LLM Agent task management, several UI exist to visualize the interface - recommended to use [zjrosen/perles](https://github.com/zjrosen/perles) viz. does the CLI keep SQLite and background sync to the control plane or simpler just directly interact with the control plan? What about integration with Org preferred issue tracker (Redmine / JIRA / ...)
+
 
 ---
 
 ### User Story 4 - Capture Implementation Session History (Priority: P4)
 
-During implementation, every interaction between developers, LLM agents, and the codebase must be captured, including file edits, user decisions, course corrections, and clarifications. This creates an audit trail showing how decisions evolved during execution.
+During implementation via `/speckit.implement`, every interaction between developers, LLM agents, and the codebase is captured in JSONL session files. These files record tool calls, file edits, user decisions, and course corrections, creating an audit trail showing how decisions evolved during execution.
+
+**Session Data Sources**:
+- Claude Code session files: `~/.claude/projects/<project-hash>/<session-uuid>.jsonl`
+- Each JSONL entry contains: timestamp, message type, tool calls, file operations, user responses
+- Sessions are linked to tasks via Beads comments (`bd comments add`)
+
+**Captured Events**:
+- Tool invocations (Read, Write, Edit, Bash, etc.)
+- File modifications with before/after content
+- User clarification questions and answers (via AskUserQuestion)
+- Course corrections when implementation deviates from plan
 
 **Why this priority**: Session history provides accountability and learning opportunities, but the core SDD workflow can function without detailed implementation logs initially. Teams can adopt this as they mature their processes.
 
-**Independent Test**: Can be tested by executing a task, making file edits, answering clarification questions, and verifying the complete interaction history is captured and linked to the task. Delivers value by enabling post-implementation review and knowledge sharing.
+**Independent Test**: Can be fully tested by executing a task via `/speckit.implement`, making file edits, and verifying the session JSONL captures all tool calls with timestamps. Delivers value by enabling post-implementation review and knowledge sharing.
 
 **Acceptance Scenarios**:
 
-1. **Given** a developer starts working on a task, **When** they make file edits through LLM-assisted commands, **Then** each edit is logged with file path, change description, and timestamp
-2. **Given** an implementation session encounters uncertainty, **When** the developer or LLM asks clarification questions, **Then** questions and answers are captured in the session log
-3. **Given** implementation deviates from the original plan, **When** course corrections are made, **Then** the rationale for changes is documented in the session history
-4. **Given** a completed task, **When** reviewing the implementation session, **Then** the complete timeline of edits, decisions, and interactions is available for audit or learning purposes
+1. **Given** a developer starts working on a task, **When** they invoke `/speckit.implement` and make file edits, **Then** each tool call is logged to the session JSONL with file path, operation type, and timestamp
+2. **Given** an implementation session encounters uncertainty, **When** the LLM uses AskUserQuestion tool, **Then** the question and user's answer are captured in the session JSONL
+3. **Given** implementation deviates from the original plan, **When** course corrections are made, **Then** the session includes the deviation context and can be linked to the Beads task via `bd comments add`
+4. **Given** a completed task, **When** querying session history, **Then** the complete JSONL timeline of tool calls, decisions, and interactions is available for audit or replay
 
 ---
 
@@ -186,16 +234,31 @@ When teams discover issues or want to revisit earlier decisions, they need to ro
 
 ### Key Entities
 
-- **Specification**: Represents a feature's requirements including user stories, functional requirements, edge cases, and clarifications. Attributes: unique ID, title, description, version history, creation timestamp, last modified timestamp, author chain
-- **Clarification**: Question-answer pair linked to a specific requirement or user story. Attributes: question text, answer text, linked requirement ID, author, timestamp
-- **Plan**: Implementation approach document linked to a specification. Attributes: unique ID, specification ID, alternatives list, selected approach, technology decisions, references, version history
-- **Alternative**: Technical approach option evaluated during planning. Attributes: description, pros, cons, selection status, evaluation notes
-- **Task**: Discrete work unit in a task graph. Attributes: unique ID, plan ID, phase, description, priority, status, dependencies, estimated effort
-- **TaskDependency**: Relationship between tasks defining execution order. Attributes: prerequisite task ID, dependent task ID, dependency type (blocking/informational)
-- **Session**: Implementation session log for a task. Attributes: task ID, start timestamp, end timestamp, participant IDs (humans and LLM agents), interaction sequence
-- **SessionEvent**: Individual action during implementation. Attributes: session ID, timestamp, event type (file edit, decision point, question, course correction), content, author
-- **Branch**: Divergent version of specifications/plans for exploring alternatives. Attributes: branch name, parent version ID, creation timestamp, merge status
-- **Version**: Snapshot of an artifact at a point in time. Attributes: artifact ID, version number, content snapshot, timestamp, author, change description
+**Specification Artifacts** (from `/speckit.specify` and `/speckit.clarify`):
+- **Specification (spec.md)**: Feature requirements including user stories (with priorities P1-P6), functional requirements (FR-001, FR-002...), edge cases, and success criteria. Stored in `specs/<NNN>-<feature-name>/spec.md`
+- **Clarification**: Question-answer pair recorded in `## Clarifications` section with `### Session YYYY-MM-DD` subheadings. Linked to specific taxonomy categories (Functional Scope, Domain Model, Non-Functional, etc.)
+- **Requirements Checklist**: Quality validation stored in `specs/<NNN>-<feature-name>/checklists/requirements.md`
+
+**Planning Artifacts** (from `/speckit.plan`):
+- **Plan (plan.md)**: Implementation approach with technical context, constitution checks, and phase gates
+- **Research (research.md)**: Technical decisions with Decision/Rationale/Alternatives format for each unknown
+- **Data Model (data-model.md)**: Entity definitions, fields, relationships, validation rules extracted from spec
+- **Contracts (contracts/)**: API schemas (Proto/OpenAPI) generated from functional requirements
+- **Quickstart (quickstart.md)**: Test scenarios and getting-started examples
+
+**Task Management** (from `/speckit.tasks` via Beads):
+- **Epic**: Top-level Beads issue (type: epic) representing the entire feature. Labels: `spec:<slug>`, `component:<area>`
+- **Feature**: Phase grouping (type: feature) with `--deps parent-child:<epic-id>`. Labels: `phase:setup`, `phase:US1`, etc.
+- **Task**: Individual work unit (type: task) with description, design notes, acceptance criteria, and `--deps parent-child:<feature-id>`. Labels: `story:US1`, `requirement:FR-001`, `component:<area>`
+
+**Session Tracking** (from `/speckit.implement`):
+- **Session (JSONL)**: Claude Code session file at `~/.claude/projects/<hash>/<uuid>.jsonl` containing tool calls, file operations, and user responses
+- **SessionEvent**: Individual JSONL entry with timestamp, message type (user/assistant/tool), and content
+- **TaskComment**: Link between session and Beads task via `bd comments add <task-id>`
+
+**Versioning**:
+- **Branch**: Git branch (e.g., `001-feature-name`) containing all feature artifacts
+- **Version**: Git commit representing a snapshot of all artifacts at a point in time
 
 ## Success Criteria *(mandatory)*
 
