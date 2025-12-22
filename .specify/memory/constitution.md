@@ -16,7 +16,7 @@ Removed Sections:
 - None (initial version)
 
 Templates Requiring Updates:
-✅ plan-template.md - Constitution Check section aligns with principles
+✅ plan-template.md - Updated Constitution Check section with principle checklist
 ✅ spec-template.md - User scenarios and requirements align with testing standards
 ✅ tasks-template.md - Task structure supports test-first workflow
 ✅ agent-file-template.md - No updates required (general template)
