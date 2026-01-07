@@ -9,7 +9,7 @@
 
 ### User Story 1 - Capture and Version Specifications (Priority: P1)
 
-Development teams need to capture user requirements, functional specifications, and clarifications in a structured, version-controlled format. Team members and LLM agents collaborate using `/speckit.specify` to create specifications and `/speckit.clarify` to refine them through iterative Q&A sessions, ensuring all stakeholders have a shared understanding before implementation begins.
+Development teams need to capture user requirements, functional specifications, and clarifications in a structured, version-controlled format. Team members and LLM agents collaborate using `/specledger.specify` to create specifications and `/specledger.clarify` to refine them through iterative Q&A sessions, ensuring all stakeholders have a shared understanding before implementation begins.
 
 **Generated Artifacts**:
 - `specs/<NNN>-<feature-name>/spec.md` - Feature specification with user stories, functional requirements, success criteria
@@ -18,12 +18,12 @@ Development teams need to capture user requirements, functional specifications, 
 
 **Why this priority**: This is the foundation of the entire SDD workflow. Without structured specifications, all downstream activities (planning, task generation, implementation) lack a reliable source of truth. This delivers immediate value by centralizing requirement gathering and eliminating ambiguity.
 
-**Independent Test**: Can be fully tested by invoking `/speckit.specify` to create a specification, then `/speckit.clarify` to add clarification questions and answers, and verifying the changes are versioned in the control plane. Delivers value by providing a single source of truth for requirements.
+**Independent Test**: Can be fully tested by invoking `/specledger.specify` to create a specification, then `/specledger.clarify` to add clarification questions and answers, and verifying the changes are versioned in the control plane. Delivers value by providing a single source of truth for requirements.
 
 **Acceptance Scenarios**:
 
-1. **Given** a team wants to start a new feature, **When** they invoke `/speckit.specify` with a feature description, **Then** the system creates a numbered feature branch (e.g., `001-feature-name`), generates `spec.md` with user stories and functional requirements, and stores it in the control plane
-2. **Given** an existing specification has ambiguous requirements, **When** team members invoke `/speckit.clarify`, **Then** the system scans for ambiguities across taxonomy categories (Functional Scope, Domain Model, Non-Functional, etc.), asks up to 10 targeted questions, and records answers in a `## Clarifications` section with session timestamps
+1. **Given** a team wants to start a new feature, **When** they invoke `/specledger.specify` with a feature description, **Then** the system creates a numbered feature branch (e.g., `001-feature-name`), generates `spec.md` with user stories and functional requirements, and stores it in the control plane
+2. **Given** an existing specification has ambiguous requirements, **When** team members invoke `/specledger.clarify`, **Then** the system scans for ambiguities across taxonomy categories (Functional Scope, Domain Model, Non-Functional, etc.), asks up to 10 targeted questions, and records answers in a `## Clarifications` section with session timestamps
 3. **Given** a specification has been modified multiple times, **When** a user requests the version history, **Then** they see all changes with timestamps, authors (human or LLM agent), and can view or restore any previous version
 4. **Given** multiple team members are collaborating on a specification, **When** they make concurrent edits, **Then** the system tracks all changes using Git-style merge with conflict markers
 
@@ -36,7 +36,7 @@ Development teams need to capture user requirements, functional specifications, 
 
 ### User Story 2 - Track Implementation Planning and Research (Priority: P2)
 
-Once specifications are defined, technical leads and LLM agents invoke `/speckit.plan` to explore implementation approaches, document technical alternatives, evaluate tradeoffs, and capture decisions about technology choices and architectural patterns. The planning workflow executes in phases, generating design artifacts linked to the originating specification.
+Once specifications are defined, technical leads and LLM agents invoke `/specledger.plan` to explore implementation approaches, document technical alternatives, evaluate tradeoffs, and capture decisions about technology choices and architectural patterns. The planning workflow executes in phases, generating design artifacts linked to the originating specification.
 
 **Generated Artifacts**:
 - `specs/<NNN>-<feature-name>/plan.md` - Implementation plan with technical context, constitution checks, and phase gates
@@ -47,11 +47,11 @@ Once specifications are defined, technical leads and LLM agents invoke `/speckit
 
 **Why this priority**: Planning bridges the gap between requirements and execution. Without documented alternatives and tradeoffs, teams lose the reasoning behind technical decisions, making future maintenance and adaptation difficult. This builds on P1 by adding the "how" layer to the "what" layer.
 
-**Independent Test**: Can be fully tested by invoking `/speckit.plan` on a completed specification, verifying that research.md resolves all unknowns, data-model.md captures entities, and contracts/ defines API schemas. Delivers value by preserving technical decision-making rationale.
+**Independent Test**: Can be fully tested by invoking `/specledger.plan` on a completed specification, verifying that research.md resolves all unknowns, data-model.md captures entities, and contracts/ defines API schemas. Delivers value by preserving technical decision-making rationale.
 
 **Acceptance Scenarios**:
 
-1. **Given** a completed specification, **When** a technical lead invokes `/speckit.plan`, **Then** the system executes Phase 0 (research) to resolve all "NEEDS CLARIFICATION" items and generates `research.md` with Decision/Rationale/Alternatives for each unknown
+1. **Given** a completed specification, **When** a technical lead invokes `/specledger.plan`, **Then** the system executes Phase 0 (research) to resolve all "NEEDS CLARIFICATION" items and generates `research.md` with Decision/Rationale/Alternatives for each unknown
 2. **Given** Phase 0 research is complete, **When** the system executes Phase 1 (design), **Then** it generates `data-model.md` (entities from spec), `contracts/` (API schemas from functional requirements), and `quickstart.md` (test scenarios)
 3. **Given** a project constitution exists, **When** the plan is generated, **Then** the system validates against constitution gates and errors if violations are unjustified
 4. **Given** planning includes external research, **When** LLM agents search for best practices, **Then** findings are consolidated in `research.md` with references to documentation and patterns
@@ -65,7 +65,7 @@ Once specifications are defined, technical leads and LLM agents invoke `/speckit
 
 ### User Story 3 - Generate and Manage Task Dependency Graphs (Priority: P3)
 
-Based on specifications and plans, teams invoke `/speckit.tasks` to break down work into granular tasks organized by user story phases. The system uses the Beads issue tracker (`bd` CLI) to create epics, features, and tasks with dependency relationships, labels for traceability, and priority ordering.
+Based on specifications and plans, teams invoke `/specledger.tasks` to break down work into granular tasks organized by user story phases. The system uses the Beads issue tracker (`bd` CLI) to create epics, features, and tasks with dependency relationships, labels for traceability, and priority ordering.
 
 **Generated Artifacts**:
 - `specs/<NNN>-<feature-name>/tasks.md` - Task index with Beads queries, MVP scope, and phase structure
@@ -79,11 +79,11 @@ Based on specifications and plans, teams invoke `/speckit.tasks` to break down w
 
 **Why this priority**: Task graphs translate plans into executable work units. This enables parallel work streams and helps teams understand critical paths. While important, teams can manually create task lists initially, making this lower priority than core specification and planning capabilities.
 
-**Independent Test**: Can be fully tested by invoking `/speckit.tasks` on a completed plan, verifying Beads issues are created with correct parent-child relationships, and using `bd ready` to find unblocked tasks. Delivers value by providing a clear execution roadmap.
+**Independent Test**: Can be fully tested by invoking `/specledger.tasks` on a completed plan, verifying Beads issues are created with correct parent-child relationships, and using `bd ready` to find unblocked tasks. Delivers value by providing a clear execution roadmap.
 
 **Acceptance Scenarios**:
 
-1. **Given** a completed implementation plan, **When** a team invokes `/speckit.tasks`, **Then** the system creates a Beads epic with features per phase (Setup, Foundational, US1, US2, etc.) and tasks with `--deps parent-child:<id>` relationships
+1. **Given** a completed implementation plan, **When** a team invokes `/specledger.tasks`, **Then** the system creates a Beads epic with features per phase (Setup, Foundational, US1, US2, etc.) and tasks with `--deps parent-child:<id>` relationships
 2. **Given** tasks have dependencies, **When** a task is marked complete via `bd close`, **Then** `bd ready` shows dependent tasks as unblocked and available for work
 3. **Given** tasks span multiple user stories, **When** querying with `bd list --label "story:US1"`, **Then** only tasks for that story are returned with their dependency context preserved
 4. **Given** a complex feature with many tasks, **When** filtering with `bd list --label "phase:setup" --limit 10`, **Then** relevant tasks are returned with priority ordering and file paths for implementation
@@ -97,7 +97,7 @@ Based on specifications and plans, teams invoke `/speckit.tasks` to break down w
 
 ### User Story 4 - Capture Implementation Session History (Priority: P4)
 
-During implementation via `/speckit.implement`, every interaction between developers, LLM agents, and the codebase is captured in JSONL session files. These files record tool calls, file edits, user decisions, and course corrections, creating an audit trail showing how decisions evolved during execution.
+During implementation via `/specledger.implement`, every interaction between developers, LLM agents, and the codebase is captured in JSONL session files. These files record tool calls, file edits, user decisions, and course corrections, creating an audit trail showing how decisions evolved during execution.
 
 **Session Data Sources**:
 - Claude Code session files: `~/.claude/projects/<project-hash>/<session-uuid>.jsonl`
@@ -112,11 +112,11 @@ During implementation via `/speckit.implement`, every interaction between develo
 
 **Why this priority**: Session history provides accountability and learning opportunities, but the core SDD workflow can function without detailed implementation logs initially. Teams can adopt this as they mature their processes.
 
-**Independent Test**: Can be fully tested by executing a task via `/speckit.implement`, making file edits, and verifying the session JSONL captures all tool calls with timestamps. Delivers value by enabling post-implementation review and knowledge sharing.
+**Independent Test**: Can be fully tested by executing a task via `/specledger.implement`, making file edits, and verifying the session JSONL captures all tool calls with timestamps. Delivers value by enabling post-implementation review and knowledge sharing.
 
 **Acceptance Scenarios**:
 
-1. **Given** a developer starts working on a task, **When** they invoke `/speckit.implement` and make file edits, **Then** each tool call is logged to the session JSONL with file path, operation type, and timestamp
+1. **Given** a developer starts working on a task, **When** they invoke `/specledger.implement` and make file edits, **Then** each tool call is logged to the session JSONL with file path, operation type, and timestamp
 2. **Given** an implementation session encounters uncertainty, **When** the LLM uses AskUserQuestion tool, **Then** the question and user's answer are captured in the session JSONL
 3. **Given** implementation deviates from the original plan, **When** course corrections are made, **Then** the session includes the deviation context and can be linked to the Beads task via `bd comments add`
 4. **Given** a completed task, **When** querying session history, **Then** the complete JSONL timeline of tool calls, decisions, and interactions is available for audit or replay
@@ -234,24 +234,24 @@ When teams discover issues or want to revisit earlier decisions, they need to ro
 
 ### Key Entities
 
-**Specification Artifacts** (from `/speckit.specify` and `/speckit.clarify`):
+**Specification Artifacts** (from `/specledger.specify` and `/specledger.clarify`):
 - **Specification (spec.md)**: Feature requirements including user stories (with priorities P1-P6), functional requirements (FR-001, FR-002...), edge cases, and success criteria. Stored in `specs/<NNN>-<feature-name>/spec.md`
 - **Clarification**: Question-answer pair recorded in `## Clarifications` section with `### Session YYYY-MM-DD` subheadings. Linked to specific taxonomy categories (Functional Scope, Domain Model, Non-Functional, etc.)
 - **Requirements Checklist**: Quality validation stored in `specs/<NNN>-<feature-name>/checklists/requirements.md`
 
-**Planning Artifacts** (from `/speckit.plan`):
+**Planning Artifacts** (from `/specledger.plan`):
 - **Plan (plan.md)**: Implementation approach with technical context, constitution checks, and phase gates
 - **Research (research.md)**: Technical decisions with Decision/Rationale/Alternatives format for each unknown
 - **Data Model (data-model.md)**: Entity definitions, fields, relationships, validation rules extracted from spec
 - **Contracts (contracts/)**: API schemas (Proto/OpenAPI) generated from functional requirements
 - **Quickstart (quickstart.md)**: Test scenarios and getting-started examples
 
-**Task Management** (from `/speckit.tasks` via Beads):
+**Task Management** (from `/specledger.tasks` via Beads):
 - **Epic**: Top-level Beads issue (type: epic) representing the entire feature. Labels: `spec:<slug>`, `component:<area>`
 - **Feature**: Phase grouping (type: feature) with `--deps parent-child:<epic-id>`. Labels: `phase:setup`, `phase:US1`, etc.
 - **Task**: Individual work unit (type: task) with description, design notes, acceptance criteria, and `--deps parent-child:<feature-id>`. Labels: `story:US1`, `requirement:FR-001`, `component:<area>`
 
-**Session Tracking** (from `/speckit.implement`):
+**Session Tracking** (from `/specledger.implement`):
 - **Session (JSONL)**: Claude Code session file at `~/.claude/projects/<hash>/<uuid>.jsonl` containing tool calls, file operations, and user responses
 - **SessionEvent**: Individual JSONL entry with timestamp, message type (user/assistant/tool), and content
 - **TaskComment**: Link between session and Beads task via `bd comments add <task-id>`
