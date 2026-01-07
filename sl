@@ -393,10 +393,10 @@ print_next_steps() {
     gum style --italic "   claude"
     echo ""
 
-    gum style --foreground 212 "2. Create your project constitution (copy-paste this prompt):"
+    gum style --foreground 212 "2. Create your project constitution (example prompt):"
     echo ""
     gum style \
-        --border rounded --padding "1 2" --width 65 \
+        --italic --width 65 \
         "Create principles focused on YAGNI, KISS, user" \
         "experience consistency, and performance requirements." \
         "Include governance for how these principles should" \

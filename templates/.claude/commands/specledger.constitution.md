@@ -27,6 +27,7 @@ Follow this execution flow:
 2. Collect/derive values for placeholders:
    - If user input (conversation) supplies a value, use it.
    - Otherwise infer from existing repo context (README, docs, prior constitution versions if embedded).
+   - For every inferred value, Group the core principles in logical groups of 4. For each group of principals, ask a multiSelect user question allowing the user to confirm or adjust each principle using the AskUserQuestion tool. Use the AskUserQuestion tool multiple times if needed to cover all principles and based on user adjustments.
    - For governance dates: `RATIFICATION_DATE` is the original adoption date (if unknown ask or mark TODO), `LAST_AMENDED_DATE` is today if changes are made, otherwise keep previous.
    - `CONSTITUTION_VERSION` must increment according to semantic versioning rules:
      - MAJOR: Backward incompatible governance/principle removals or redefinitions.
