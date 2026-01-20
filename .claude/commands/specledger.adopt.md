@@ -8,9 +8,69 @@ description: Create or update the feature specification from a natural language 
 $ARGUMENTS
 ```
 
+**Input Modes:**
+1. **From Audit**: `--module-id [ID] --from-audit` (reads from `scripts/audit-cache.json`)
+2. **Manual**: Feature description text (legacy mode, analyzes current branch)
+
 You **MUST** consider the user input before proceeding (if not empty).
 
 ## Outline
+
+**Check Input Mode:**
+
+1. **If `--from-audit` flag is present:**
+   - Read `scripts/audit-cache.json`
+   - Extract module data by `module-id`
+   - Skip branch analysis (code context already available from audit)
+   - Use audit data for: key functions, data models, API contracts, dependencies
+   - Jump directly to step 4 (spec generation) with audit context
+
+2. **If manual mode (legacy - no audit flag):**
+   - Follow original flow: analyze branch commits
+   - Feature description is the text after `/specledger.adopt`
+   - Spawn Explore Agent to research branch history
+
+### For Audit Mode (--from-audit):
+
+1. **Load Context (Global + Module):**
+   ```bash
+   # 1. Read Global Project Context (Architecture & Patterns)
+   jq '.global_context' scripts/audit-cache.json
+   
+   # 2. Extract Target Module Data
+   jq '.modules[] | select(.id == "[MODULE_ID]")' scripts/audit-cache.json
+   ```
+   
+   **CRITICAL INSTRUCTION:** You MUST apply the patterns defined in `global_context` to the generated spec:
+   - **Architecture Style**: Reflect the project's architecture in requirements (e.g., if Clean Architecture, requirements should respect domain boundaries)
+   - **API Pattern**: Use the project's API conventions (REST/GraphQL/gRPC) when describing integration points
+   - **Auth Pattern**: Reference the project's authentication approach when describing security requirements
+   - **Common Patterns**: Apply project-wide conventions (e.g., if project uses Zod for validation, requirements should expect validated inputs; if using centralized error handling, specs should reference error response formats)
+   - **Testing Approach**: Align acceptance criteria with the project's testing patterns
+   
+   This ensures the spec is consistent with existing system architecture and developers don't need to learn new patterns.
+
+2. **Validate Module Data:**
+   - Verify all paths exist
+   - Verify key functions exist at specified line numbers
+   - Verify data models match struct/class definitions
+   - If mismatch: ERROR "Audit cache stale - run /specledger.audit --force"
+
+3. **Enrich Context (read actual code samples):**
+   For each key function in audit data, read full implementation:
+   ```bash
+   # Example: Read CreateArtifact function
+   sed -n '[START_LINE],[END_LINE]p' pkg/sdk/artifact.go
+   ```
+
+4. **Generate Spec from Audit Data:**
+   Use audit's `key_functions`, `data_models`, `api_contracts` to populate:
+   - User Scenarios: Infer from function names and purposes
+   - Functional Requirements: Based on API contracts
+   - Key Entities: Direct copy from `data_models`
+   - Success Criteria: Derive from function signatures and integration points
+
+### For Manual Mode (legacy):
 
 The text the user typed after `/specledger.adopt` in the triggering message **is** the feature description. Assume you always have it available in this conversation even if `$ARGUMENTS` appears literally below. Do not ask the user to repeat it unless they provided an empty command.
 
@@ -77,6 +137,37 @@ Given that feature description, do this:
 
 4. Follow this execution flow:
 
+    **FOR AUDIT MODE (--from-audit):**
+    
+    1. Load module from audit cache
+       If cache missing: ERROR "Run /specledger.audit first"
+    2. Verify module data is current (check file paths exist)
+       If stale: ERROR "Run /specledger.audit --force to refresh"
+    3. Read key function implementations (5-10 most important)
+       Extract actual business logic, not just signatures
+    4. Map functions to User Scenarios:
+       - Each key function = 1 user scenario
+       - Function name → Scenario title
+       - Function params → Scenario inputs
+       - Function returns → Scenario outputs
+       - Function implementation → Scenario steps
+    5. Extract Functional Requirements from API contracts:
+       - Each endpoint = 1 requirement
+       - Request schema → Input requirements
+       - Response schema → Output requirements
+       - Error codes → Error handling requirements
+    6. Copy Data Models directly from audit
+       - Use `data_models` array as-is for Key Entities section
+    7. Generate Success Criteria from integration points:
+       - Database operations → Performance criteria
+       - External APIs → Reliability criteria
+       - Complex logic → Correctness criteria
+    8. Fill Dependencies & Assumptions from audit's `dependencies` field
+    9. Query Beads for related features/tasks (same as manual mode)
+    10. Return: SUCCESS (spec ready with real code evidence)
+    
+    **FOR MANUAL MODE (legacy):**
+    
     1. Parse user description from Input
        If empty: ERROR "No feature description provided"
     2. Extract key concepts from description and existing branch research
@@ -115,6 +206,7 @@ Given that feature description, do this:
       **Purpose**: Validate specification completeness and quality before proceeding to planning
       **Created**: [DATE]
       **Feature**: [Link to spec.md]
+      **Mode**: [From Audit | From Branch Analysis]
 
       ## Content Quality
 
@@ -140,6 +232,14 @@ Given that feature description, do this:
       - [ ] User scenarios cover primary flows
       - [ ] Feature meets measurable outcomes defined in Success Criteria
       - [ ] No implementation details leak into specification
+
+      ## Audit Mode Quality (if --from-audit used)
+
+      - [ ] All key functions from audit are reflected in requirements
+      - [ ] Data models from audit are documented in Key Entities
+      - [ ] API contracts from audit are reflected in functional requirements
+      - [ ] Dependencies from audit are listed in Dependencies section
+      - [ ] Real code evidence is cited (file:line references)
 
       ## Notes
 
