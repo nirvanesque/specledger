@@ -41,12 +41,18 @@ func init() {
 		ID:    "vendor",
 		Title: "Vendor",
 	})
+	rootCmd.AddGroup(&cobra.Group{
+		ID:    "tools",
+		Title: "Tools",
+	})
 
 	// Add subcommands
 	rootCmd.AddCommand(commands.VarDepsCmd)
 	rootCmd.AddCommand(commands.VarRefsCmd)
 	rootCmd.AddCommand(commands.VarGraphCmd)
 	rootCmd.AddCommand(commands.VarVendorCmd)
+	rootCmd.AddCommand(commands.VarConflictCmd)
+	rootCmd.AddCommand(commands.VarUpdateCmd)
 }
 
 func main() {

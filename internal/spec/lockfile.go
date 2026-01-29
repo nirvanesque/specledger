@@ -38,6 +38,58 @@ func NewLockfile(version string) *Lockfile {
 	}
 }
 
+// CalculateSHA256 calculates the SHA-256 hash of the lockfile content
+func (l *Lockfile) CalculateSHA256() (string, error) {
+	data, err := json.Marshal(l)
+	if err != nil {
+		return "", err
+	}
+
+	hash := sha256.Sum256(data)
+	return hex.EncodeToString(hash[:]), nil
+}
+
+// CalculateSHA256FromBytes calculates SHA-256 hash of byte data
+func CalculateSHA256FromBytes(data []byte) string {
+	hash := sha256.Sum256(data)
+	return hex.EncodeToString(hash[:])
+}
+
+// Verify verifies that the lockfile content matches the current content
+func (l *Lockfile) Verify(manifest *Manifest) ([]string, error) {
+	var issues []string
+
+	// Check that all manifest dependencies have entries
+	for _, dep := range manifest.Dependecies {
+		found := false
+		for _, entry := range l.Entries {
+			if entry.RepositoryURL == dep.RepositoryURL && entry.SpecPath == dep.SpecPath {
+				found = true
+				break
+			}
+		}
+		if !found {
+			issues = append(issues, fmt.Sprintf("missing entry for dependency: %s %s", dep.RepositoryURL, dep.SpecPath))
+		}
+	}
+
+	// Check that all entries have valid hashes
+	for _, entry := range l.Entries {
+		if entry.ContentHash == "" {
+			issues = append(issues, fmt.Sprintf("empty content hash for: %s %s", entry.RepositoryURL, entry.SpecPath))
+		}
+		if len(entry.ContentHash) != 64 {
+			issues = append(issues, fmt.Sprintf("invalid content hash length for: %s %s (got %d, want 64)", entry.RepositoryURL, entry.SpecPath, len(entry.ContentHash)))
+		}
+	}
+
+	if len(issues) > 0 {
+		return issues, fmt.Errorf("lockfile verification failed: %d issues found", len(issues))
+	}
+
+	return nil, nil
+}
+
 // Write writes the lockfile to disk
 func (l *Lockfile) Write(path string) error {
 	// Create directories if needed
@@ -90,52 +142,6 @@ func (l *Lockfile) RemoveEntry(repoURL, specPath string) bool {
 		}
 	}
 	return false
-}
-
-// CalculateSHA256 calculates the SHA-256 hash of the lockfile content
-func (l *Lockfile) CalculateSHA256() (string, error) {
-	data, err := json.Marshal(l)
-	if err != nil {
-		return "", err
-	}
-
-	hash := sha256.Sum256(data)
-	return hex.EncodeToString(hash[:]), nil
-}
-
-// Verify verifies that the lockfile matches the current content
-func (l *Lockfile) Verify(manifest *Manifest) ([]string, error) {
-	var issues []string
-
-	// Check that all manifest dependencies have entries
-	for _, dep := range manifest.Dependecies {
-		found := false
-		for _, entry := range l.Entries {
-			if entry.RepositoryURL == dep.RepositoryURL && entry.SpecPath == dep.SpecPath {
-				found = true
-				break
-			}
-		}
-		if !found {
-			issues = append(issues, fmt.Sprintf("missing entry for dependency: %s %s", dep.RepositoryURL, dep.SpecPath))
-		}
-	}
-
-	// Check that all entries have valid hashes
-	for _, entry := range l.Entries {
-		if entry.ContentHash == "" {
-			issues = append(issues, fmt.Sprintf("empty content hash for: %s %s", entry.RepositoryURL, entry.SpecPath))
-		}
-		if len(entry.ContentHash) != 64 {
-			issues = append(issues, fmt.Sprintf("invalid content hash length for: %s %s", entry.RepositoryURL, entry.SpecPath))
-		}
-	}
-
-	if len(issues) > 0 {
-		return issues, fmt.Errorf("lockfile verification failed: %d issues found", len(issues))
-	}
-
-	return nil, nil
 }
 
 // GetEntry retrieves an entry from the lockfile

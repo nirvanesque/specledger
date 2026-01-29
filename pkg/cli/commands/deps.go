@@ -214,12 +214,6 @@ func runResolveDependencies(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func runUpdateDependencies(cmd *cobra.Command, args []string) error {
-	fmt.Println("Updating dependencies...")
-	fmt.Println("This feature will be implemented in a future version.")
-	return nil
-}
-
 func runRemoveDependency(cmd *cobra.Command, args []string) error {
 	repoURL := args[0]
 	specPath := args[1]
