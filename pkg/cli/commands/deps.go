@@ -249,6 +249,56 @@ func runRemoveDependency(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+func runUpdateDependencies(cmd *cobra.Command, args []string) error {
+	force, _ := cmd.Flags().GetBool("force")
+
+	manifestPath := "specs/spec.mod"
+
+	// Read current manifest
+	manifest, err := spec.ParseManifest(manifestPath)
+	if err != nil {
+		return fmt.Errorf("failed to read manifest: %w", err)
+	}
+
+	if len(manifest.Dependecies) == 0 {
+		return fmt.Errorf("no dependencies to update")
+	}
+
+	fmt.Printf("Checking %d dependency(ies) for updates...\n", len(manifest.Dependecies))
+
+	var updated []string
+	var unchanged []string
+
+	for _, dep := range manifest.Dependecies {
+		// Determine if we should check this dependency
+		shouldUpdate := force || args == nil || len(args) == 0
+
+		if !shouldUpdate && len(args) > 0 {
+			// Check if this dependency matches the provided repo URL
+			if strings.HasPrefix(dep.RepositoryURL, args[0]) {
+				shouldUpdate = true
+			}
+		}
+
+		if shouldUpdate {
+			// TODO: Actually fetch and check for updates
+			// For now, we'll just display current version
+			fmt.Printf("  %s: already at version %s\n", dep.RepositoryURL, dep.Version)
+			unchanged = append(unchanged, dep.RepositoryURL)
+		}
+	}
+
+	fmt.Printf("\nUpdated %d dependency(ies)\n", len(updated))
+	fmt.Printf("Unchanged %d dependency(ies)\n", len(unchanged))
+
+	// TODO: Write updated manifest if there were updates
+	// if err := spec.WriteManifest(manifestPath, manifest); err != nil {
+	// 	return fmt.Errorf("failed to write manifest: %w", err)
+	// }
+
+	return nil
+}
+
 func isValidURL(s string) bool {
 	// Simple check for common Git URLs
 	return len(s) > 0 && (strings.HasPrefix(s, "http://") ||

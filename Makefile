@@ -1,12 +1,12 @@
 .PHONY: build run test clean help
 
-# Build the CLI binary
+# Build the CLI binary (produces bin/sl)
 build:
-	go build -o bin/specledger cmd/main.go
+	go build -o bin/sl cmd/main.go
 
 # Run the CLI
 run: build
-	./bin/specledger
+	./bin/sl
 
 # Run tests
 test:
@@ -27,9 +27,11 @@ vet:
 
 # Build for all platforms
 build-all:
-	GOOS=linux GOARCH=amd64 go build -o bin/specledger-linux cmd/main.go
-	GOOS=darwin GOARCH=amd64 go build -o bin/specledger-darwin cmd/main.go
-	GOOS=windows GOARCH=amd64 go build -o bin/specledger-windows.exe cmd/main.go
+	GOOS=linux GOARCH=amd64 go build -o bin/sl-linux cmd/main.go
+	GOOS=darwin GOARCH=amd64 go build -o bin/sl-darwin cmd/main.go
+	GOOS=windows GOARCH=amd64 go build -o bin/sl-windows.exe cmd/main.go
+	GOOS=linux GOARCH=arm64 go build -o bin/sl-linux-arm64 cmd/main.go
+	GOOS=darwin GOARCH=arm64 go build -o bin/sl-darwin-arm64 cmd/main.go
 
 # Clean build artifacts
 clean:
@@ -38,7 +40,7 @@ clean:
 # Help
 help:
 	@echo "Available targets:"
-	@echo "  make build          - Build the CLI binary"
+	@echo "  make build          - Build the CLI binary (produces bin/sl)"
 	@echo "  make run            - Build and run the CLI"
 	@echo "  make test           - Run tests"
 	@echo "  make test-coverage  - Run tests with coverage report"

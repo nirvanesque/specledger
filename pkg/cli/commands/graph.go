@@ -1,13 +1,17 @@
 package commands
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 )
 
 // VarGraphCmd represents the graph command
+// TODO: Implement dependency graph visualization
 var VarGraphCmd = &cobra.Command{
 	Use:   "graph",
 	Short: "Display dependency graph",
+	Long:  `Visualize the dependency graph with various output formats.`,
 }
 
 // VarShowCmd represents the show command
@@ -16,21 +20,21 @@ var VarShowCmd = &cobra.Command{
 	Short: "Show the dependency graph",
 	Long:  `Display the complete dependency graph with all nodes and edges.`,
 	Args:  cobra.MaximumNArgs(1),
-	Run:   runShowGraph,
+	RunE:  runShowGraph,
 }
 
 // VarExportCmd represents the export command
 var VarExportCmd = &cobra.Command{
 	Use:   "export --format <format> --output <file>",
 	Short: "Export graph to file",
-	Run:   runExportGraph,
+	RunE:  runExportGraph,
 }
 
 // VarTransitiveCmd represents the transitive command
 var VarTransitiveCmd = &cobra.Command{
 	Use:   "transitive [--depth <n>]",
 	Short: "Show transitive dependencies",
-	Run:   runTransitiveDependencies,
+	RunE:  runTransitiveDependencies,
 }
 
 func init() {
@@ -43,18 +47,27 @@ func init() {
 	VarTransitiveCmd.Flags().IntP("depth", "d", 0, "Maximum depth (0 = unlimited)")
 }
 
-func runShowGraph(cmd *cobra.Command, args []string) {
+func runShowGraph(cmd *cobra.Command, args []string) error {
 	format, _ := cmd.Flags().GetString("format")
-	cmd.Printf("Showing dependency graph (format: %s)\n", format)
+	fmt.Printf("Graph visualization is not yet implemented.\n")
+	fmt.Printf("Requested format: %s\n", format)
+	fmt.Println("\nTODO: Implement dependency graph visualization")
+	return nil
 }
 
-func runExportGraph(cmd *cobra.Command, args []string) {
+func runExportGraph(cmd *cobra.Command, args []string) error {
 	format, _ := cmd.Flags().GetString("format")
 	output, _ := cmd.Flags().GetString("output")
-	cmd.Printf("Exporting graph (format: %s, output: %s)\n", format, output)
+	fmt.Printf("Graph export is not yet implemented.\n")
+	fmt.Printf("Requested format: %s, output: %s\n", format, output)
+	fmt.Println("\nTODO: Implement graph export functionality")
+	return nil
 }
 
-func runTransitiveDependencies(cmd *cobra.Command, args []string) {
+func runTransitiveDependencies(cmd *cobra.Command, args []string) error {
 	depth, _ := cmd.Flags().GetInt("depth")
-	cmd.Printf("Showing transitive dependencies (depth: %d)\n", depth)
+	fmt.Printf("Transitive dependency visualization is not yet implemented.\n")
+	fmt.Printf("Requested depth: %d\n", depth)
+	fmt.Println("\nTODO: Implement transitive dependency analysis")
+	return nil
 }

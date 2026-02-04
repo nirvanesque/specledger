@@ -42,4 +42,9 @@ bd ready --limit 5                         # Find issues ready to work on
 ```
 
 ## Recent Changes
+- 003-cli-unification: Added Go 1.21+ + Cobra (spf13/cobra), Bubble Tea, gum, mise
 - 002-spec-dependency-linking: Added [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
+
+## Active Technologies
+- Go 1.21+ + Cobra (spf13/cobra), Bubble Tea, gum, mise (003-cli-unification)
+- YAML files (config, lockfile, template files) (003-cli-unification)
