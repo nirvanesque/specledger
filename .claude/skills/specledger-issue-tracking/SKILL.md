@@ -1,13 +1,13 @@
 ---
-name: bd-issue-tracking
-description: Track complex, multi-session work with dependency graphs using bd (beads) issue tracker. Use when work spans multiple sessions, has complex dependencies, or requires persistent context across compaction cycles. For simple single-session linear tasks, TodoWrite remains appropriate.
+name: specledger-issue-tracking
+description: Track complex, multi-session work with dependency graphs using SpecLedger issue tracker. Use when work spans multiple sessions, has complex dependencies, or requires persistent context across compaction cycles. For simple single-session linear tasks, TodoWrite remains appropriate.
 ---
 
-# bd Issue Tracking
+# SpecLedger Issue Tracking
 
 ## Overview
 
-bd is a graph-based issue tracker for persistent memory across sessions. Use for multi-session work with complex dependencies; use TodoWrite for simple single-session tasks.
+SpecLedger issue tracker provides persistent memory across sessions using bd (beads). Use for multi-session work with complex dependencies; use TodoWrite for simple single-session tasks.
 
 ## When to Use bd vs TodoWrite
 
