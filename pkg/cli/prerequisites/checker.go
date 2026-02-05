@@ -67,7 +67,7 @@ var (
 			DisplayName: "openspec (OpenSpec framework)",
 			Category:    metadata.ToolCategoryFramework,
 			VersionFlag: "--version",
-			InstallCmd:  "mise install npm:@openspec/cli",
+			InstallCmd:  "mise install npm:@fission-ai/openspec",
 		},
 	}
 )

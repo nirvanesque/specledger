@@ -39,7 +39,7 @@ func updateMiseToml(projectPath string, framework metadata.FrameworkChoice) erro
 		}
 
 		// Handle OpenSpec
-		if strings.HasPrefix(trimmed, "# \"npm:@openspec/cli\"") {
+		if strings.HasPrefix(trimmed, "# \"npm:@fission-ai/openspec\"") {
 			if framework == metadata.FrameworkOpenSpec || framework == metadata.FrameworkBoth {
 				// Uncomment OpenSpec
 				updatedLines = append(updatedLines, strings.TrimPrefix(line, "# "))

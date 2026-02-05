@@ -8,4 +8,4 @@
 # "pipx:git+https://github.com/github/spec-kit.git" = "latest"
 
 # OpenSpec - Lightweight, iterative workflow
-# "npm:@openspec/cli" = "latest"
+# "npm:@fission-ai/openspec" = "latest"
