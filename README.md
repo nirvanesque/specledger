@@ -7,8 +7,11 @@ SpecLedger (`sl`) helps you create new projects and manage specification depende
 ## Features
 
 - **Interactive TUI**: Create projects with a beautiful terminal interface
-- **Non-Interactive Mode**: Perfect for CI/CD and automation
+- **Framework Agnostic**: Choose Spec Kit, OpenSpec, both, or none for SDD workflows
+- **Prerequisites Checking**: Automatically detect and install required tools (mise, bd, perles)
 - **Dependency Management**: Add, remove, and list spec dependencies
+- **YAML Metadata**: Modern, human-readable project configuration with `specledger.yaml`
+- **Migration Support**: Convert legacy `.mod` files to YAML with `sl migrate`
 - **Local Caching**: Dependencies are cached locally at `~/.specledger/cache` for offline use
 - **LLM Integration**: Cached specs can be easily referenced by AI agents
 - **Cross-Platform**: Works on Linux, macOS, and Windows
@@ -124,16 +127,31 @@ sl deps resolve
 |---------|-------------|
 | `sl new` | Create a new project (interactive TUI) |
 | `sl new --ci --project-name <name> --short-code <code>` | Create a project (non-interactive) |
+| `sl init` | Initialize SpecLedger in an existing repository |
+
+### Diagnostics
+
+| Command | Description |
+|---------|-------------|
+| `sl doctor` | Check installation status of all required and optional tools |
+| `sl doctor --json` | Get tool status in JSON format for CI/CD |
 
 ### Dependency Management
 
 | Command | Description |
 |---------|-------------|
-| `sl deps list` | List all dependencies |
-| `sl deps add <url>` | Add a dependency |
+| `sl deps list` | List all dependencies from `specledger.yaml` |
+| `sl deps add <url>` | Add a dependency to `specledger.yaml` |
 | `sl deps remove <url>` | Remove a dependency |
 | `sl deps resolve` | Download and cache dependencies |
 | `sl deps update` | Update to latest versions |
+
+### Migration
+
+| Command | Description |
+|---------|-------------|
+| `sl migrate` | Convert legacy `specledger.mod` to `specledger.yaml` |
+| `sl migrate --dry-run` | Preview migration changes |
 
 ### Visualization
 
@@ -141,6 +159,44 @@ sl deps resolve
 |---------|-------------|
 | `sl graph show` | Show dependency graph (coming soon) |
 | `sl graph export` | Export graph to file (coming soon) |
+
+## SDD Framework Choice
+
+SpecLedger supports multiple SDD (Specification-Driven Development) frameworks. When creating a new project, you can choose:
+
+| Framework | Description | Best For |
+|-----------|-------------|----------|
+| **Spec Kit** | GitHub Spec Kit - structured, phase-gated workflow with specifications, plans, and tasks | Teams that want structured development phases |
+| **OpenSpec** | OpenSpec - lightweight, iterative specification workflow | Teams that prefer flexibility and iteration |
+| **Both** | Use both frameworks as needed | Teams that want maximum flexibility |
+| **None** | Use SpecLedger only for bootstrap and dependencies | Teams that have their own SDD process |
+
+Framework choice is recorded in `specledger/specledger.yaml` and doesn't affect SpecLedger's core functionality.
+
+## Project Metadata
+
+SpecLedger projects use `specledger/specledger.yaml` for configuration:
+
+```yaml
+version: "1.0.0"
+
+project:
+  name: my-project
+  short_code: mp
+  created: "2026-02-05T10:30:00Z"
+  modified: "2026-02-05T10:30:00Z"
+  version: "0.1.0"
+
+framework:
+  choice: speckit  # or openspec, both, none
+
+dependencies:
+  - url: git@github.com:org/api-spec
+    branch: main
+    path: spec.md
+    alias: api
+    resolved_commit: abc123...
+```
 
 ## Usage Examples
 
@@ -177,6 +233,26 @@ sl deps remove git@github.com:org/auth-spec
 
 # Download and cache all dependencies
 sl deps resolve
+```
+
+### Checking Tool Status
+
+```bash
+# Check if all required tools are installed
+sl doctor
+
+# Get JSON output for CI/CD
+sl doctor --json
+```
+
+### Migrating from Legacy Format
+
+```bash
+# Convert specledger.mod to specledger.yaml
+sl migrate
+
+# Preview migration without making changes
+sl migrate --dry-run
 ```
 
 ### Dependency Caching
