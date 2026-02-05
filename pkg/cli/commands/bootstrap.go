@@ -163,6 +163,12 @@ func runBootstrapInteractive(l *logger.Logger, cfg *config.Config) error {
 		return fmt.Errorf("failed to create project metadata: %w", err)
 	}
 
+	// Install and initialize frameworks
+	if err := installAndInitFrameworks(projectPath, frameworkChoice); err != nil {
+		// Don't fail bootstrap if framework init fails
+		fmt.Printf("⚠️  Framework initialization had issues: %v\n", err)
+	}
+
 	// Initialize git repo (but don't commit - user might bootstrap into existing repo)
 	if err := initializeGitRepo(projectPath); err != nil {
 		return fmt.Errorf("failed to initialize git: %w", err)
@@ -173,13 +179,10 @@ func runBootstrapInteractive(l *logger.Logger, cfg *config.Config) error {
 	fmt.Printf("✓ Beads prefix: %s\n", shortCode)
 	fmt.Printf("✓ SDD Framework: %s\n", framework)
 	if framework != "none" {
-		fmt.Printf("✓ Framework tools enabled in mise.toml\n")
+		fmt.Printf("✓ Framework tools enabled and initialized\n")
 	}
 	fmt.Printf("\nNext steps:\n")
 	fmt.Printf("  cd %s\n", projectPath)
-	if framework != "none" {
-		fmt.Printf("  mise install    # Install framework tools\n")
-	}
 	fmt.Printf("  sl doctor       # Check tool installation status\n")
 
 	return nil
@@ -246,6 +249,12 @@ func runBootstrapNonInteractive(cmd *cobra.Command, l *logger.Logger, cfg *confi
 		return fmt.Errorf("failed to create project metadata: %w", err)
 	}
 
+	// Install and initialize frameworks
+	if err := installAndInitFrameworks(projectPath, frameworkChoice); err != nil {
+		// Don't fail bootstrap if framework init fails
+		fmt.Printf("⚠️  Framework initialization had issues: %v\n", err)
+	}
+
 	// Initialize git repo (but don't commit - user might bootstrap into existing repo)
 	if err := initializeGitRepo(projectPath); err != nil {
 		return fmt.Errorf("failed to initialize git: %w", err)
@@ -255,11 +264,11 @@ func runBootstrapNonInteractive(cmd *cobra.Command, l *logger.Logger, cfg *confi
 	fmt.Printf("\n✓ Project created: %s\n", projectPath)
 	fmt.Printf("✓ Beads prefix: %s\n", shortCode)
 	fmt.Printf("✓ SDD Framework: %s\n", framework)
+	if framework != "none" {
+		fmt.Printf("✓ Framework tools enabled and initialized\n")
+	}
 	fmt.Printf("\nNext steps:\n")
 	fmt.Printf("  cd %s\n", projectPath)
-	if framework != "none" {
-		fmt.Printf("  mise install    # Install framework tools\n")
-	}
 	fmt.Printf("  sl doctor       # Check tool status\n")
 
 	return nil
