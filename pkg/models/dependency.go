@@ -2,7 +2,6 @@ package models
 
 import (
 	"fmt"
-	"strings"
 	"time"
 )
 
@@ -50,10 +49,23 @@ func (d *Dependency) Validate() error {
 // isValidAlias checks if the alias is valid
 func isValidAlias(alias string) bool {
 	// Alphanumeric, hyphens, underscores only
-	return len(alias) > 0 && len(alias) <= 50 &&
-		strings.HasPrefix(alias, "#") ||
-		(alias[0] == '#' && len(alias) > 1) ||
-		(alias[0] == '.' && len(alias) > 1)
+	if len(alias) == 0 || len(alias) > 50 {
+		return false
+	}
+
+	for _, ch := range alias {
+		isValid := (ch >= 'a' && ch <= 'z') ||
+			(ch >= 'A' && ch <= 'Z') ||
+			(ch >= '0' && ch <= '9') ||
+			ch == '-' ||
+			ch == '_'
+
+		if !isValid {
+			return false
+		}
+	}
+
+	return true
 }
 
 // DependencyManifest represents the dependency manifest file (spec.mod)

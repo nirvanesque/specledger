@@ -14,45 +14,64 @@ import (
 var VarDepsCmd = &cobra.Command{
 	Use:   "deps",
 	Short: "Manage specification dependencies",
+	Long: `Manage external specification dependencies for your project.
+
+Dependencies are stored in spec.mod and cached locally for offline use.
+
+Examples:
+  sl deps list                           # List all dependencies
+  sl deps add git@github.com:org/spec    # Add a dependency
+  sl deps remove git@github.com:org/spec # Remove a dependency`,
 }
 
 // VarAddCmd represents the add command
 var VarAddCmd = &cobra.Command{
-	Use:   "add <repo-url> [branch] [spec-path] [--alias <name>]",
-	Short: "Add a dependency to the manifest",
-	Long:  `Add an external specification dependency to the current project's spec.mod file.`,
-	Args:  cobra.MinimumNArgs(1),
-	RunE:  runAddDependency,
+	Use:     "add <repo-url> [branch] [spec-path]",
+	Short:   "Add a dependency",
+	Long:    `Add an external specification dependency to your project. The dependency will be downloaded and cached locally.`,
+	Example: `  sl deps add git@github.com:org/api-spec
+  sl deps add git@github.com:org/api-spec v1.0 specs/api.md
+  sl deps add git@github.com:org/api-spec main spec.md --alias api`,
+	Args: cobra.MinimumNArgs(1),
+	RunE: runAddDependency,
 }
 
 // VarDepsListCmd represents the list command
 var VarDepsListCmd = &cobra.Command{
-	Use:   "list [--include-transitive]",
-	Short: "List all declared dependencies",
-	RunE:  runListDependencies,
-}
-
-// VarResolveCmd represents the resolve command
-var VarResolveCmd = &cobra.Command{
-	Use:   "resolve [--no-cache] [--deep]",
-	Short: "Resolve all dependencies and generate spec.sum",
-	Long:  `Fetch external specifications, validate versions, and generate the lockfile with cryptographic hashes.`,
-	RunE:  runResolveDependencies,
-}
-
-// VarDepsUpdateCmd represents the update command
-var VarDepsUpdateCmd = &cobra.Command{
-	Use:   "update [--force] [repo-url]",
-	Short: "Update dependencies to latest compatible versions",
-	RunE:  runUpdateDependencies,
+	Use:     "list",
+	Short:   "List all dependencies",
+	Long:    `List all declared dependencies from spec.mod, showing their repository, version, and local cache status.`,
+	Example: `  sl deps list`,
+	RunE:    runListDependencies,
 }
 
 // VarRemoveCmd represents the remove command
 var VarRemoveCmd = &cobra.Command{
-	Use:   "remove <repo-url> <spec-path>",
-	Short: "Remove a dependency from the manifest",
-	Args:  cobra.ExactArgs(2),
-	RunE:  runRemoveDependency,
+	Use:     "remove <repo-url>",
+	Short:   "Remove a dependency",
+	Long:    `Remove a dependency from spec.mod. The local cache will be kept for future use.`,
+	Example: `  sl deps remove git@github.com:org/api-spec`,
+	Args:    cobra.ExactArgs(1),
+	RunE:    runRemoveDependency,
+}
+
+// VarResolveCmd represents the resolve command
+var VarResolveCmd = &cobra.Command{
+	Use:     "resolve",
+	Short:   "Download and cache dependencies",
+	Long:    `Download all dependencies from spec.mod and cache them locally. Validates versions and generates cryptographic hashes.`,
+	Example: `  sl deps resolve`,
+	RunE:    runResolveDependencies,
+}
+
+// VarDepsUpdateCmd represents the update command
+var VarDepsUpdateCmd = &cobra.Command{
+	Use:     "update [repo-url]",
+	Short:   "Update dependencies to latest versions",
+	Long:    `Update dependencies to their latest compatible versions. If no URL is given, updates all dependencies.`,
+	Example: `  sl deps update                    # Update all
+  sl deps update git@github.com:org/spec # Update one`,
+	RunE:    runUpdateDependencies,
 }
 
 func init() {
@@ -100,7 +119,7 @@ func runAddDependency(cmd *cobra.Command, args []string) error {
 	}
 
 	// Read existing manifest
-	manifestPath := "specs/spec.mod"
+	manifestPath := "specledger/specledger.mod"
 	manifest, err := spec.ParseManifest(manifestPath)
 	if err != nil {
 		return fmt.Errorf("failed to read manifest: %w", err)
@@ -124,7 +143,7 @@ func runAddDependency(cmd *cobra.Command, args []string) error {
 }
 
 func runListDependencies(cmd *cobra.Command, args []string) error {
-	manifestPath := "specs/spec.mod"
+	manifestPath := "specledger/specledger.mod"
 	manifest, err := spec.ParseManifest(manifestPath)
 	if err != nil {
 		return fmt.Errorf("failed to read manifest: %w", err)
@@ -148,10 +167,9 @@ func runListDependencies(cmd *cobra.Command, args []string) error {
 
 func runResolveDependencies(cmd *cobra.Command, args []string) error {
 	noCache, _ := cmd.Flags().GetBool("no-cache")
-	_, _ = cmd.Flags().GetBool("deep") // deep flag is not used yet
 
-	manifestPath := "specs/spec.mod"
-	lockfilePath := "specs/spec.sum"
+	manifestPath := "specledger/specledger.mod"
+	lockfilePath := "specledger/specledger.sum"
 
 	// Read manifest
 	manifest, err := spec.ParseManifest(manifestPath)
@@ -169,18 +187,19 @@ func runResolveDependencies(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("%d validation errors found", len(errors))
 	}
 
-	fmt.Printf("Resolving %d dependencies...\n", len(manifest.Dependecies))
+	// Show cache directory
+	cacheDir := spec.GetGlobalCacheDir()
+	fmt.Printf("Cache directory: %s\n", cacheDir)
+	fmt.Printf("Resolving %d dependencies...\n\n", len(manifest.Dependecies))
 
-	// Create resolver
-	resolver := spec.NewResolver(".spec-cache")
+	// Create resolver (uses global cache)
+	resolver := spec.NewResolver("")
 
 	// Resolve dependencies
 	results, err := resolver.Resolve(cmd.Context(), manifest, noCache)
 	if err != nil {
 		return fmt.Errorf("failed to resolve dependencies: %w", err)
 	}
-
-	fmt.Println()
 
 	// Create lockfile
 	lockfile := spec.NewLockfile(spec.ManifestVersion)
@@ -196,7 +215,12 @@ func runResolveDependencies(cmd *cobra.Command, args []string) error {
 		}
 		lockfile.AddEntry(entry)
 
-		fmt.Printf("✓ Resolved: %s\n", result.Dependency.RepositoryURL)
+		source := "remote"
+		if result.Source == "cache" {
+			source = "cached"
+		}
+
+		fmt.Printf("✓ %s: %s\n", result.Dependency.RepositoryURL, source)
 		fmt.Printf("  Commit: %s\n", result.CommitHash)
 		fmt.Printf("  Spec: %s\n", result.Dependency.SpecPath)
 		fmt.Printf("  Hash: %s\n", result.ContentHash)
@@ -216,9 +240,8 @@ func runResolveDependencies(cmd *cobra.Command, args []string) error {
 
 func runRemoveDependency(cmd *cobra.Command, args []string) error {
 	repoURL := args[0]
-	specPath := args[1]
 
-	manifestPath := "specs/spec.mod"
+	manifestPath := "specledger/specledger.mod"
 	manifest, err := spec.ParseManifest(manifestPath)
 	if err != nil {
 		return fmt.Errorf("failed to read manifest: %w", err)
@@ -226,7 +249,7 @@ func runRemoveDependency(cmd *cobra.Command, args []string) error {
 
 	removed := false
 	for i, dep := range manifest.Dependecies {
-		if dep.RepositoryURL == repoURL && dep.SpecPath == specPath {
+		if dep.RepositoryURL == repoURL {
 			manifest.Dependecies = append(manifest.Dependecies[:i], manifest.Dependecies[i+1:]...)
 			removed = true
 			break
@@ -234,7 +257,7 @@ func runRemoveDependency(cmd *cobra.Command, args []string) error {
 	}
 
 	if !removed {
-		return fmt.Errorf("dependency not found: %s %s", repoURL, specPath)
+		return fmt.Errorf("dependency not found: %s", repoURL)
 	}
 
 	manifest.UpdatedAt = time.Now()
@@ -244,7 +267,7 @@ func runRemoveDependency(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to write manifest: %w", err)
 	}
 
-	fmt.Printf("Removed dependency: %s from %s\n", repoURL, specPath)
+	fmt.Printf("Removed dependency: %s\n", repoURL)
 
 	return nil
 }
@@ -252,7 +275,7 @@ func runRemoveDependency(cmd *cobra.Command, args []string) error {
 func runUpdateDependencies(cmd *cobra.Command, args []string) error {
 	force, _ := cmd.Flags().GetBool("force")
 
-	manifestPath := "specs/spec.mod"
+	manifestPath := "specledger/specledger.mod"
 
 	// Read current manifest
 	manifest, err := spec.ParseManifest(manifestPath)

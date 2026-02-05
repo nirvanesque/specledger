@@ -2,16 +2,16 @@
 
 > Unified CLI for project bootstrap and specification dependency management
 
-SpecLedger provides a single CLI tool that integrates project bootstrap (with interactive TUI) and specification dependency management. Use `sl` for all operations, with full backward compatibility with the legacy `specledger` alias.
+SpecLedger (`sl`) helps you create new projects and manage specification dependencies with a simple, intuitive CLI.
 
 ## Features
 
-- **Interactive TUI**: Beautiful terminal user interface for project bootstrap
-- **Non-Interactive Mode**: Perfect for CI/CD and automated workflows
-- **Specification Dependency Management**: Track and manage spec dependencies
-- **Multiple Distribution Channels**: Install from GitHub Releases, build from source, or use package managers
-- **Cross-Platform**: Supports Linux, macOS, and Windows
-- **Clear Error Messages**: Actionable suggestions when things go wrong
+- **Interactive TUI**: Create projects with a beautiful terminal interface
+- **Non-Interactive Mode**: Perfect for CI/CD and automation
+- **Dependency Management**: Add, remove, and list spec dependencies
+- **Local Caching**: Dependencies are cached locally at `~/.specledger/cache` for offline use
+- **LLM Integration**: Cached specs can be easily referenced by AI agents
+- **Cross-Platform**: Works on Linux, macOS, and Windows
 
 ## Installation
 
@@ -90,145 +90,102 @@ npx @specledger/cli@latest --help
 
 ## Quick Start
 
-### Interactive Bootstrap
+### Create a New Project
 
 ```bash
+# Interactive mode (recommended)
 sl new
+
+# Non-interactive mode (for CI/CD)
+sl new --ci --project-name myproject --short-code mp --project-dir ~/demos
 ```
 
-This starts an interactive TUI that will guide you through:
-
-1. Project name
-2. Short code (for Beads prefix)
-3. Playbook selection
-4. Agent shell selection
-
-### Non-Interactive Bootstrap
+### Manage Dependencies
 
 ```bash
-sl new --ci --project-name myproject --short-code mp
-```
-
-### List Dependencies
-
-```bash
-cd myproject
+# List dependencies
 sl deps list
-```
 
-### Update Dependencies
+# Add a dependency
+sl deps add git@github.com:org/api-spec
 
-```bash
-sl deps update
-```
+# Remove a dependency
+sl deps remove git@github.com:org/api-spec
 
-### Check for Conflicts
-
-```bash
-sl deps conflict
+# Download and cache dependencies
+sl deps resolve
 ```
 
 ## Commands
 
-### Bootstrap Commands
+### Project Creation
 
 | Command | Description |
 |---------|-------------|
-| `sl new` | Start interactive TUI for project bootstrap |
-| `sl new --project-name <name> --short-code <code>` | Non-interactive bootstrap |
+| `sl new` | Create a new project (interactive TUI) |
+| `sl new --ci --project-name <name> --short-code <code>` | Create a project (non-interactive) |
 
-### Dependency Management Commands
-
-| Command | Description |
-|---------|-------------|
-| `sl deps list` | List all specification dependencies |
-| `sl deps add <spec>` | Add a specification dependency |
-| `sl deps remove <spec>` | Remove a specification dependency |
-| `sl deps update` | Update dependencies to latest compatible versions |
-| `sl deps conflict` | Check for dependency conflicts |
-| `sl deps vendor` | Vendor dependencies for offline use |
-
-### Reference Management Commands
+### Dependency Management
 
 | Command | Description |
 |---------|-------------|
-| `sl refs validate` | Validate external specification references |
+| `sl deps list` | List all dependencies |
+| `sl deps add <url>` | Add a dependency |
+| `sl deps remove <url>` | Remove a dependency |
+| `sl deps resolve` | Download and cache dependencies |
+| `sl deps update` | Update to latest versions |
 
-### Graph Commands
-
-| Command | Description |
-|---------|-------------|
-| `sl graph deps` | Display dependency graph |
-| `sl graph refs` | Display reference graph |
-
-### Other Commands
+### Visualization
 
 | Command | Description |
 |---------|-------------|
-| `sl conflict` | Check for dependency conflicts |
-| `sl update` | Update dependencies to latest compatible versions |
-| `sl vendor` | Vendor dependencies for offline use |
-| `sl --help` | Show help for all commands |
-| `sl --version` | Print version information |
+| `sl graph show` | Show dependency graph (coming soon) |
+| `sl graph export` | Export graph to file (coming soon) |
 
 ## Usage Examples
 
-### Creating a New Project
-
-#### Interactive (Recommended)
+### Creating a Project
 
 ```bash
+# Interactive - guided by TUI
 sl new
-# Follow the prompts in the TUI
-```
 
-#### Using Flags (CI/CD)
+# Non-interactive - for CI/CD
+sl new --ci --project-name my-api --short-code mapi
 
-```bash
-sl new --ci \
-  --project-name my-api \
-  --short-code mapi \
-  --playbook "General SWE" \
-  --shell claude-code
+# With custom directory
+sl new --ci --project-name my-api --short-code mapi --project-dir ~/projects
 ```
 
 ### Managing Dependencies
 
 ```bash
-# List current dependencies
+# Add a spec dependency
+sl deps add git@github.com:org/auth-spec
+
+# Add with specific branch and path
+sl deps add git@github.com:org/api-spec v1.0 specs/api.md
+
+# Add with alias for easy reference
+sl deps add git@github.com:org/db-spec --alias db
+
+# List all dependencies
 sl deps list
 
-# Add a new dependency
-sl deps add github.com/org/project-spec
-
 # Remove a dependency
-sl deps remove github.com/org/project-spec
+sl deps remove git@github.com:org/auth-spec
 
-# Update all dependencies
-sl deps update
-
-# Check for conflicts
-sl deps conflict
+# Download and cache all dependencies
+sl deps resolve
 ```
 
-### Viewing Dependency Graphs
+### Dependency Caching
 
-```bash
-# Show dependency graph
-sl graph deps
+Dependencies are automatically cached locally:
 
-# Show reference graph
-sl graph refs
-```
-
-### Using Non-Interactive Mode
-
-Perfect for CI/CD pipelines:
-
-```bash
-# In CI/CD environment, always use --ci flag
-sl new --ci --project-name ci-project --short-code ci
-```
+- Cache location: `~/.specledger/cache/`
+- Cached specs can be referenced by LLMs
+- Offline mode supported once cached
 
 ## Configuration
 

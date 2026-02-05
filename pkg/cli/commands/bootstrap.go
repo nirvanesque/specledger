@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,9 +11,9 @@ import (
 
 	"github.com/spf13/cobra"
 	"specledger/pkg/cli/config"
-	"specledger/pkg/cli/dependencies"
 	"specledger/pkg/cli/logger"
 	"specledger/pkg/cli/tui"
+	"specledger/pkg/embedded"
 )
 
 var (
@@ -27,12 +28,20 @@ var (
 // VarBootstrapCmd is the bootstrap command
 var VarBootstrapCmd = &cobra.Command{
 	Use:   "new",
-	Short: "Start interactive TUI for project bootstrap",
-	Long: `Bootstrap a new SpecLedger project with all necessary infrastructure:
-- Claude Code skills and commands
-- Beads issue tracker
-- SpecKit templates and scripts
-- Tool configuration (mise)`,
+	Short: "Create a new SpecLedger project",
+	Long: `Create a new SpecLedger project with all necessary infrastructure:
+
+Interactive mode:
+  sl new
+
+Non-interactive mode (for CI/CD):
+  sl new --ci --project-name <name> --short-code <code> --project-dir <path>
+
+The bootstrap creates:
+- .claude/ directory with skills and commands
+- .beads/ directory for issue tracking
+- specledger/ directory for specifications
+- specledger/specledger.mod file for project metadata`,
 
 	// RunE is called when the command is executed
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -57,30 +66,6 @@ var VarBootstrapCmd = &cobra.Command{
 
 // runBootstrapInteractive runs the bootstrap with Bubble Tea TUI
 func runBootstrapInteractive(l *logger.Logger, cfg *config.Config) error {
-	l.Info("Starting interactive bootstrap...")
-
-	// Check dependencies
-	r := dependencies.New()
-	hasGum := r.CheckGum()
-	hasMise := r.CheckMise()
-
-	l.Debug(fmt.Sprintf("Dependencies: gum=%v, mise=%v", hasGum, hasMise))
-
-	// If gum is missing, prompt user
-	if !hasGum {
-		shouldInstall, err := r.PromptForInstall(r.GetGumDep())
-		if err != nil {
-			return fmt.Errorf("failed to check for gum: %w", err)
-		}
-		if shouldInstall {
-			l.Info(fmt.Sprintf("Installing %s...", r.GetGumDep().Name))
-			if _, err := r.Install(r.GetGumDep()); err != nil {
-				return fmt.Errorf("failed to install gum: %w", err)
-			}
-			l.Info("Gum installed successfully")
-		}
-	}
-
 	// Determine default project directory
 	defaultDir := cfg.DefaultProjectDir
 	if demoDirFlag != "" {
@@ -105,15 +90,8 @@ func runBootstrapInteractive(l *logger.Logger, cfg *config.Config) error {
 	playbook := answers["playbook"]
 	shell := answers["shell"]
 
-	l.Info(fmt.Sprintf("Selected: project=%s, dir=%s, code=%s, playbook=%s, shell=%s",
-		projectName, projectDir, shortCode, playbook, shell))
-
-	l.Info(fmt.Sprintf("Project: %s (short code: %s, playbook: %s, shell: %s)",
-		projectName, shortCode, playbook, shell))
-
 	// Create project path
 	projectPath := filepath.Join(projectDir, projectName)
-	l.Debug(fmt.Sprintf("Creating project at: %s", projectPath))
 
 	// Check if directory already exists
 	if _, err := os.Stat(projectPath); err == nil {
@@ -130,16 +108,13 @@ func runBootstrapInteractive(l *logger.Logger, cfg *config.Config) error {
 	if err := os.MkdirAll(projectPath, 0755); err != nil {
 		return fmt.Errorf("failed to create project directory: %w", err)
 	}
-	l.Info(fmt.Sprintf("Created directory: %s", projectPath))
 
 	// Copy template files
-	l.Info("Copying SpecLedger templates...")
 	if err := copyTemplates(projectPath, shortCode, projectName); err != nil {
 		return fmt.Errorf("failed to copy templates: %w", err)
 	}
 
 	// Initialize git repo (but don't commit - user might bootstrap into existing repo)
-	l.Info("Initializing git repository...")
 	if err := initializeGitRepo(projectPath); err != nil {
 		return fmt.Errorf("failed to initialize git: %w", err)
 	}
@@ -151,7 +126,7 @@ func runBootstrapInteractive(l *logger.Logger, cfg *config.Config) error {
 	fmt.Printf("✓ Agent Shell: %s\n", shell)
 	fmt.Printf("\nNext steps:\n")
 	fmt.Printf("  cd %s\n", projectPath)
-	fmt.Printf("  mise install    # Install tools (bd, perles, gum)\n")
+	fmt.Printf("  mise install    # Install tools (bd)\n")
 	fmt.Printf("  claude\n")
 
 	return nil
@@ -159,8 +134,6 @@ func runBootstrapInteractive(l *logger.Logger, cfg *config.Config) error {
 
 // runBootstrapNonInteractive runs bootstrap without TUI
 func runBootstrapNonInteractive(cmd *cobra.Command, l *logger.Logger, cfg *config.Config) error {
-	l.Info("Running bootstrap in non-interactive mode...")
-
 	// Validate required flags
 	if projectNameFlag == "" {
 		return fmt.Errorf("--project-name flag is required in non-interactive mode")
@@ -185,7 +158,6 @@ func runBootstrapNonInteractive(cmd *cobra.Command, l *logger.Logger, cfg *confi
 	}
 
 	projectPath := filepath.Join(demoDir, projectName)
-	l.Debug(fmt.Sprintf("Creating project at: %s", projectPath))
 
 	// Check if directory already exists
 	if _, err := os.Stat(projectPath); err == nil {
@@ -196,16 +168,13 @@ func runBootstrapNonInteractive(cmd *cobra.Command, l *logger.Logger, cfg *confi
 	if err := os.MkdirAll(projectPath, 0755); err != nil {
 		return ErrPermissionDenied(projectPath)
 	}
-	l.Info(fmt.Sprintf("Created directory: %s", projectPath))
 
 	// Copy template files
-	l.Info("Copying SpecLedger templates...")
 	if err := copyTemplates(projectPath, shortCode, projectName); err != nil {
 		return fmt.Errorf("failed to copy templates: %w", err)
 	}
 
 	// Initialize git repo (but don't commit - user might bootstrap into existing repo)
-	l.Info("Initializing git repository...")
 	if err := initializeGitRepo(projectPath); err != nil {
 		return fmt.Errorf("failed to initialize git: %w", err)
 	}
@@ -236,11 +205,8 @@ func init() {
 	VarBootstrapCmd.PersistentFlags().BoolVarP(&ciFlag, "ci", "", false, "Force non-interactive mode (skip TUI)")
 }
 
-// copyTemplates copies SpecLedger template files to the new project
+// copyTemplates copies SpecLedger template files to the new project using embedded templates
 func copyTemplates(projectPath, shortCode, projectName string) error {
-	// Get the template directory from the specledger installation
-	templateDir := "templates"
-
 	// Files and directories to exclude from copying
 	excludePaths := map[string]bool{
 		"specledger/FORK.md":          true,
@@ -252,50 +218,45 @@ func copyTemplates(projectPath, shortCode, projectName string) error {
 		// Don't exclude specledger directory itself - we want it!
 	}
 
-	// Copy template files
-	err := filepath.Walk(templateDir, func(path string, info os.FileInfo, err error) error {
+	// Walk through the embedded filesystem
+	err := fs.WalkDir(embedded.TemplatesFS, "templates", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 
-		// Calculate relative path
-		relPath, err := filepath.Rel(templateDir, path)
-		if err != nil {
-			return err
-		}
-
-		// Skip the template directory itself
-		if relPath == "." {
+		// Calculate relative path (remove "templates/" prefix)
+		relPath := strings.TrimPrefix(path, "templates/")
+		if relPath == "" || relPath == "." {
 			return nil
 		}
 
 		// Check if this path should be excluded
 		if excludePaths[relPath] {
-			if info.IsDir() {
-				return filepath.SkipDir
+			if d.IsDir() {
+				return fs.SkipDir
 			}
 			return nil
 		}
 
 		destPath := filepath.Join(projectPath, relPath)
 
-		if info.IsDir() {
+		if d.IsDir() {
 			return os.MkdirAll(destPath, 0755)
 		}
 
-		// Copy file
-		data, err := os.ReadFile(path)
+		// Read file from embedded FS
+		data, err := embedded.TemplatesFS.ReadFile(path)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to read embedded file %s: %w", path, err)
 		}
 
 		// For .beads/config.yaml, replace the prefix
-		if filepath.Base(path) == "config.yaml" && filepath.Dir(path) == filepath.Join(templateDir, ".beads") {
+		if filepath.Base(path) == "config.yaml" && filepath.Dir(path) == "templates/.beads" {
 			data = []byte(strings.ReplaceAll(string(data), "issue-prefix: \"sl\"", fmt.Sprintf("issue-prefix: \"%s\"", shortCode)))
 		}
 
 		if err := os.WriteFile(destPath, data, 0644); err != nil {
-			return err
+			return fmt.Errorf("failed to write file %s: %w", destPath, err)
 		}
 
 		// If we just copied mise.toml, run mise trust
@@ -309,20 +270,21 @@ func copyTemplates(projectPath, shortCode, projectName string) error {
 	})
 
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to walk embedded templates: %w", err)
 	}
 
-	// Create specledger.mod file as project artifact
-	specledgerMod := fmt.Sprintf(`# SpecLedger Project Configuration
+	// Create specledger.mod file as project artifact (empty manifest for now)
+	specledgerMod := fmt.Sprintf(`# SpecLedger Dependency Manifest v1.0.0
 # Generated by sl new on %s
+# Project: %s
+# Short Code: %s
+#
+# To add dependencies, use:
+#   sl deps add git@github.com:org/spec main spec.md --alias alias
 
-project: %s
-short_code: %s
-playbook: %s
-agent_shell: %s
-`, time.Now().Format("2006-01-02"), projectName, shortCode, "Default (General SWE)", "Claude Code")
+`, time.Now().Format("2006-01-02"), projectName, shortCode)
 
-	return os.WriteFile(filepath.Join(projectPath, "specledger.mod"), []byte(specledgerMod), 0644)
+	return os.WriteFile(filepath.Join(projectPath, "specledger", "specledger.mod"), []byte(specledgerMod), 0644)
 }
 
 // initializeGitRepo initializes a git repository in the project directory

@@ -2,8 +2,11 @@ package spec
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
 
@@ -15,12 +18,12 @@ import (
 
 // ResolveResult represents the result of a dependency resolution
 type ResolveResult struct {
-	Dependency *models.Dependency
-	CommitHash string
-	Content    []byte
+	Dependency  *models.Dependency
+	CommitHash  string
+	Content     []byte
 	ContentHash string
-	Size       int64
-	Source     string
+	Size        int64
+	Source      string
 }
 
 // Resolver resolves dependencies by fetching specs from Git repositories
@@ -28,10 +31,20 @@ type Resolver struct {
 	cacheDir string
 }
 
-// NewResolver creates a new resolver
-func NewResolver(cacheDir string) *Resolver {
+// NewResolver creates a new resolver with global cache directory
+func NewResolver(projectCacheDir string) *Resolver {
+	// Use ~/.specledger/cache for dependency caching
+	homeDir := os.Getenv("HOME")
+	if homeDir == "" {
+		if u, err := user.Current(); err == nil {
+			homeDir = u.HomeDir
+		}
+	}
+
+	globalCache := filepath.Join(homeDir, ".specledger", "cache")
+
 	return &Resolver{
-		cacheDir: cacheDir,
+		cacheDir: globalCache,
 	}
 }
 
@@ -55,7 +68,7 @@ func (r *Resolver) resolveDependency(ctx context.Context, dep models.Dependency,
 	// Check cache first if not disabled
 	if !noCache {
 		cached, err := r.getCachedContent(dep)
-		if err == nil {
+		if err == nil && cached != nil {
 			return cached, nil
 		}
 	}
@@ -66,17 +79,19 @@ func (r *Resolver) resolveDependency(ctx context.Context, dep models.Dependency,
 		return nil, err
 	}
 
-	// Calculate hash
-	contentHash := fmt.Sprintf("%x", hash(content))
+	// Calculate SHA-256 hash
+	hasher := sha256.New()
+	hasher.Write(content)
+	contentHash := hex.EncodeToString(hasher.Sum(nil))
 
 	// Create result
 	result := &ResolveResult{
-		Dependency:    &dep,
-		CommitHash:    commitHash,
-		Content:       content,
-		ContentHash:   contentHash,
-		Size:          int64(len(content)),
-		Source:        "remote",
+		Dependency:  &dep,
+		CommitHash:  commitHash,
+		Content:     content,
+		ContentHash: contentHash,
+		Size:        int64(len(content)),
+		Source:      "remote",
 	}
 
 	// Save to cache
@@ -90,113 +105,124 @@ func (r *Resolver) resolveDependency(ctx context.Context, dep models.Dependency,
 
 // fetchFromGit fetches spec content from a Git repository
 func (r *Resolver) fetchFromGit(ctx context.Context, dep models.Dependency) ([]byte, string, error) {
-	// Parse repo URL to get owner, repo, and branch
-	_, _, err := parseGitURL(dep.RepositoryURL)
-	if err != nil {
-		return nil, "", err
-	}
+	// Convert repo URL to cache path
+	cachePath := r.getRepoCachePath(dep.RepositoryURL)
 
 	// Clone or fetch the repository
-	repo, err := git.PlainCloneContext(ctx, r.cacheDir+"/"+dep.Alias, false, &git.CloneOptions{
-		URL: dep.RepositoryURL,
-		Depth: 1, // Shallow clone for performance
+	repo, err := git.PlainCloneContext(ctx, cachePath, false, &git.CloneOptions{
+		URL:      dep.RepositoryURL,
+		Depth:    1, // Shallow clone for performance
+		Progress: nil,
 	})
 
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to clone repository: %w", err)
+		// If already exists, open it
+		if err == git.ErrRepositoryAlreadyExists {
+			repo, err = git.PlainOpen(cachePath)
+			if err != nil {
+				return nil, "", fmt.Errorf("failed to open repository: %w", err)
+			}
+		} else {
+			return nil, "", fmt.Errorf("failed to clone repository: %w", err)
+		}
 	}
 
 	// Get the branch/commit
 	var commitHash plumbing.Hash
 
-	// Handle special cases
-	if strings.HasPrefix(dep.Version, "#") {
-		// It's a branch or tag name
-		branch := strings.TrimPrefix(dep.Version, "#")
-		rev, err := repo.ResolveRevision(plumbing.Revision(branch))
-		if err != nil {
-			return nil, "", fmt.Errorf("failed to resolve branch %s: %w", branch, err)
-		}
-		commitHash = *rev
-	} else {
-		// It's a commit hash
-		rev, err := repo.ResolveRevision(plumbing.Revision(dep.Version))
-		if err != nil {
-			return nil, "", fmt.Errorf("failed to resolve commit %s: %w", dep.Version, err)
-		}
-		commitHash = *rev
+	// Handle version (branch, tag, or commit)
+	rev, err := repo.ResolveRevision(plumbing.Revision(dep.Version))
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to resolve version %s: %w", dep.Version, err)
+	}
+	commitHash = *rev
+
+	// Checkout the specific commit
+	worktree, err := repo.Worktree()
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to get worktree: %w", err)
 	}
 
-	// Read the spec file
-	specPath := filepath.Join(r.cacheDir+"/"+dep.Alias, dep.SpecPath)
+	if err := worktree.Checkout(&git.CheckoutOptions{
+		Hash:  commitHash,
+		Force: true,
+	}); err != nil {
+		return nil, "", fmt.Errorf("failed to checkout commit: %w", err)
+	}
+
+	// Read the spec file from the checked out repository
+	specPath := filepath.Join(cachePath, dep.SpecPath)
 	content, err := os.ReadFile(specPath)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to read spec file: %w", err)
+		return nil, "", fmt.Errorf("failed to read spec file %s: %w", dep.SpecPath, err)
 	}
 
 	return content, commitHash.String(), nil
 }
 
-// parseGitURL parses a Git URL into its components
-func parseGitURL(url string) (string, string, error) {
-	// Remove .git suffix if present
+// getRepoCachePath converts a repo URL to a cache path
+// Example: git@github.com:org/repo -> ~/.cache/specledger/github.com/org/repo
+func (r *Resolver) getRepoCachePath(repoURL string) string {
+	// Remove git@ prefix and .git suffix
+	url := strings.TrimPrefix(repoURL, "git@")
 	url = strings.TrimSuffix(url, ".git")
 
-	parts := strings.Split(url, "/")
-	if len(parts) < 2 {
-		return "", "", fmt.Errorf("invalid repository URL: %s", url)
-	}
+	// Replace : with / for SSH URLs
+	url = strings.Replace(url, ":", "/", 1)
 
-	// Get repo name
-	repoName := parts[len(parts)-1]
-	if strings.Contains(repoName, ".git") {
-		repoName = strings.TrimSuffix(repoName, ".git")
-	}
-
-	// Get owner (second to last part for GitHub, or path)
-	owner := parts[len(parts)-2]
-	if len(parts) > 2 && parts[0] == "github.com" {
-		owner = parts[1]
-	}
-
-	return owner, repoName, nil
-}
-
-// hash calculates a hash of the content
-func hash(data []byte) string {
-	// Simple hash for now
-	// In production, use a proper hash algorithm like SHA-256
-	return fmt.Sprintf("%x", len(data))
+	// Convert to filesystem path
+	return filepath.Join(r.cacheDir, url)
 }
 
 // getCachedContent gets content from cache
 func (r *Resolver) getCachedContent(dep models.Dependency) (*ResolveResult, error) {
-	cachePath := filepath.Join(r.cacheDir, dep.Alias, dep.SpecPath)
-	content, err := os.ReadFile(cachePath)
+	repoCachePath := r.getRepoCachePath(dep.RepositoryURL)
+	specPath := filepath.Join(repoCachePath, dep.SpecPath)
+
+	content, err := os.ReadFile(specPath)
 	if err != nil {
 		return nil, err
 	}
 
-	// Verify content hash (placeholder)
+	// Calculate hash
+	hasher := sha256.New()
+	hasher.Write(content)
+	contentHash := hex.EncodeToString(hasher.Sum(nil))
+
 	return &ResolveResult{
-		Dependency:    &dep,
-		Content:       content,
-		Source:        "cache",
+		Dependency:  &dep,
+		Content:     content,
+		ContentHash: contentHash,
+		Size:        int64(len(content)),
+		Source:      "cache",
 	}, nil
 }
 
-// saveToCache saves content to cache
+// saveToCache saves content to cache (already saved by git clone)
 func (r *Resolver) saveToCache(result *ResolveResult) error {
+	// Content is already saved by git clone in the repo cache directory
+	// We just need to ensure the cache directory exists
 	if r.cacheDir == "" {
 		return fmt.Errorf("cache directory not set")
 	}
 
-	cachePath := filepath.Join(r.cacheDir, result.Dependency.Alias, result.Dependency.SpecPath)
+	return os.MkdirAll(r.cacheDir, 0755)
+}
 
-	// Create directories if needed
-	if err := os.MkdirAll(filepath.Dir(cachePath), 0755); err != nil {
-		return err
+// GetCachePath returns the cache path for a dependency
+// This can be used by LLMs to read cached specs
+func (r *Resolver) GetCachePath(dep models.Dependency, commitHash string) string {
+	repoCachePath := r.getRepoCachePath(dep.RepositoryURL)
+	return filepath.Join(repoCachePath, dep.SpecPath)
+}
+
+// GetGlobalCacheDir returns the global cache directory
+func GetGlobalCacheDir() string {
+	homeDir := os.Getenv("HOME")
+	if homeDir == "" {
+		if u, err := user.Current(); err == nil {
+			homeDir = u.HomeDir
+		}
 	}
-
-	return os.WriteFile(cachePath, result.Content, 0644)
+	return filepath.Join(homeDir, ".specledger", "cache")
 }
