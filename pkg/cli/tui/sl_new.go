@@ -76,6 +76,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		// Handle space bar for checkbox toggle (must be before switch)
+		if m.step == stepFramework && msg.String() == " " {
+			options := getFrameworkCheckboxOptions()
+			if m.selectedIdx < len(options) {
+				key := options[m.selectedIdx]
+				m.frameworkChoices[key] = !m.frameworkChoices[key]
+			}
+			return m, nil
+		}
+
 		switch msg.Type {
 		case tea.KeyCtrlC, tea.KeyEsc:
 			m.quitting = true
@@ -100,17 +110,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 			return m, nil
-
-		case tea.KeyRunes:
-			// Handle space bar for checkbox toggle at framework step
-			if m.step == stepFramework && len(msg.Runes) > 0 && msg.Runes[0] == ' ' {
-				options := getFrameworkCheckboxOptions()
-				if m.selectedIdx < len(options) {
-					key := options[m.selectedIdx]
-					m.frameworkChoices[key] = !m.frameworkChoices[key]
-				}
-				return m, nil
-			}
 		}
 
 	case tea.WindowSizeMsg:
