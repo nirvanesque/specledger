@@ -13,7 +13,7 @@ SpecLedger is a unified framework for:
 
 ```
 specledger/
-├── specledger.mod       # Dependency manifest (declared dependencies)
+├── specledger.yaml       # Dependency manifest (declared dependencies)
 ├── specledger.sum       # Lockfile (resolved dependencies with hashes)
 ├── FORK.md             # This file
 └── specs/              # Your specification files (optional)

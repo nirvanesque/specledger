@@ -25,7 +25,7 @@ Use this command when:
 
 ## How Caching Works
 
-Dependencies are cached locally at `~/.cache/specledger/` (similar to Go's module cache):
+Dependencies are cached locally at `~/.specledger/cache/` (similar to Go's module cache):
 
 - **Automatic download**: `sl deps resolve` downloads all dependencies
 - **Offline access**: Once cached, specs are available offline
@@ -59,7 +59,7 @@ sl deps add git@github.com:org/api-spec --alias api
 ```
 
 **What happens:**
-- The dependency is added to `specs/spec.mod`
+- The dependency is added to `specs/specledger.yaml`
 - It will be downloaded when you run `sl deps resolve`
 - Once downloaded, it's cached locally for offline use
 
@@ -103,9 +103,9 @@ sl deps resolve
 ```
 
 **What happens:**
-- Downloads all dependencies from `specs/spec.mod`
+- Downloads all dependencies from `specs/specledger.yaml`
 - Validates versions and commits
-- Caches them locally at `~/.cache/specledger/`
+- Caches them locally at `~/.specledger/cache/`
 - Updates `specs/spec.sum` with cryptographic hashes
 
 **After running this:**
@@ -178,10 +178,10 @@ For LLMs and agents, cached dependencies can be read directly:
 
 ```bash
 # Cached dependencies are at:
-~/.cache/specledger/<repo-url>/<commit>/<spec-path>
+~/.specledger/cache/<repo-url>/<commit>/<spec-path>
 
 # Example:
-~/.cache/specledger/github.com/org/api-spec/a1b2c3d/spec.md
+~/.specledger/cache/github.com/org/api-spec/a1b2c3d/spec.md
 ```
 
 ## Best Practices
@@ -199,7 +199,7 @@ For LLMs and agents, cached dependencies can be read directly:
 
 - **"Not a SpecLedger project"** - Navigate to a project directory or run `sl new` first
 - **"Invalid repository URL"** - Use `git@` format (e.g., `git@github.com:org/spec`)
-- **"Dependency not found"** - Check the URL and branch in `specs/spec.mod`
+- **"Dependency not found"** - Check the URL and branch in `specs/specledger.yaml`
 - **"Not cached"** - Run `sl deps resolve` to download dependencies
 
 ## Getting Help

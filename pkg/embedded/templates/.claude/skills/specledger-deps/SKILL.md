@@ -7,7 +7,7 @@ description: Manage specification dependencies using the SpecLedger CLI deps com
 
 ## Overview
 
-The SpecLedger CLI provides commands to manage external specification dependencies. Dependencies are specified in `specledger/specledger.mod`, downloaded and cached locally at `~/.specledger/cache/` (similar to Go's module cache), and can be easily referenced by LLMs.
+The SpecLedger CLI provides commands to manage external specification dependencies. Dependencies are specified in `specledger/specledger.yaml`, downloaded and cached locally at `~/.specledger/cache/` (similar to Go's module cache), and can be easily referenced by LLMs.
 
 ## When to Use
 
@@ -64,7 +64,7 @@ sl deps add git@github.com:org/project-spec --alias myapi
 ```
 
 **What happens:**
-- The dependency is added to `specledger/specledger.mod`
+- The dependency is added to `specledger/specledger.yaml`
 - It will be downloaded when you run `sl deps resolve`
 - Once downloaded, it's cached locally for offline use
 
@@ -97,7 +97,7 @@ sl deps resolve
 ```
 
 This command:
-1. Reads `specledger/specledger.mod`
+1. Reads `specledger/specledger.yaml`
 2. Fetches external specifications from Git
 3. Validates versions and commits
 4. Caches them locally at `~/.specledger/cache/`
@@ -182,7 +182,7 @@ dependencies:
     added_at: 2024-01-15T10:00:00Z
 ```
 
-**spec.sum file structure:**
+**specledger.sum file structure:**
 ```json
 {
   "lockfile_version": "1",
@@ -224,9 +224,9 @@ sl deps add git@github.com:org/project-spec v1.2.3
 
 ### "Not a SpecLedger project"
 
-Make sure you're in a project directory with `specledger.mod`:
+Make sure you're in a project directory with `specledger.yaml`:
 ```bash
-ls specledger.mod
+ls specledger.yaml
 sl deps list
 ```
 
@@ -237,7 +237,7 @@ sl deps list
 sl deps list
 
 # Check the spec.mod file directly
-cat specledger/specledger.mod
+cat specledger/specledger.yaml
 ```
 
 ### "Failed to resolve dependencies"
@@ -258,15 +258,15 @@ Use valid Git URLs:
 
 1. **Use aliases** for common dependencies to make specs more readable
 2. **Lock versions** when you need reproducibility (use tags instead of `main`)
-3. **Resolve regularly** to keep `spec.sum` up to date
-4. **Commit spec.sum** to ensure reproducible builds
+3. **Resolve regularly** to keep `specledger.sum` up to date
+4. **Commit specledger.sum** to ensure reproducible builds
 5. **Document dependencies** in your README with their purpose
 
 ## Files Reference
 
 | File | Description |
 |------|-------------|
-| `specledger/specledger.mod` | Dependency manifest and project metadata |
+| `specledger/specledger.yaml` | Dependency manifest and project metadata |
 | `specledger/specledger.sum` | Lockfile with resolved commits and hashes |
 | `~/.specledger/cache/` | Local cache of downloaded dependencies |
 

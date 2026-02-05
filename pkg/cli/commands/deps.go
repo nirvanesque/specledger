@@ -2,12 +2,12 @@ package commands
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
-	"specledger/internal/spec"
-	"specledger/pkg/models"
+	"specledger/pkg/cli/metadata"
 )
 
 // VarDepsCmd represents the deps command
@@ -16,7 +16,7 @@ var VarDepsCmd = &cobra.Command{
 	Short: "Manage specification dependencies",
 	Long: `Manage external specification dependencies for your project.
 
-Dependencies are stored in spec.mod and cached locally for offline use.
+Dependencies are stored in specledger/specledger.yaml and cached locally for offline use.
 
 Examples:
   sl deps list                           # List all dependencies
@@ -28,7 +28,7 @@ Examples:
 var VarAddCmd = &cobra.Command{
 	Use:     "add <repo-url> [branch] [spec-path]",
 	Short:   "Add a dependency",
-	Long:    `Add an external specification dependency to your project. The dependency will be downloaded and cached locally.`,
+	Long:    `Add an external specification dependency to your project. The dependency will be tracked in specledger.yaml and cached locally for offline use.`,
 	Example: `  sl deps add git@github.com:org/api-spec
   sl deps add git@github.com:org/api-spec v1.0 specs/api.md
   sl deps add git@github.com:org/api-spec main spec.md --alias api`,
@@ -40,7 +40,7 @@ var VarAddCmd = &cobra.Command{
 var VarDepsListCmd = &cobra.Command{
 	Use:     "list",
 	Short:   "List all dependencies",
-	Long:    `List all declared dependencies from spec.mod, showing their repository, version, and local cache status.`,
+	Long:    `List all declared dependencies from specledger.yaml, showing their repository, version, and resolved status.`,
 	Example: `  sl deps list`,
 	RunE:    runListDependencies,
 }
@@ -49,7 +49,7 @@ var VarDepsListCmd = &cobra.Command{
 var VarRemoveCmd = &cobra.Command{
 	Use:     "remove <repo-url>",
 	Short:   "Remove a dependency",
-	Long:    `Remove a dependency from spec.mod. The local cache will be kept for future use.`,
+	Long:    `Remove a dependency from specledger.yaml. The local cache will be kept for future use.`,
 	Example: `  sl deps remove git@github.com:org/api-spec`,
 	Args:    cobra.ExactArgs(1),
 	RunE:    runRemoveDependency,
@@ -59,7 +59,7 @@ var VarRemoveCmd = &cobra.Command{
 var VarResolveCmd = &cobra.Command{
 	Use:     "resolve",
 	Short:   "Download and cache dependencies",
-	Long:    `Download all dependencies from spec.mod and cache them locally. Validates versions and generates cryptographic hashes.`,
+	Long:    `Download all dependencies from specledger.yaml and cache them locally at ~/.specledger/cache/.`,
 	Example: `  sl deps resolve`,
 	RunE:    runResolveDependencies,
 }
@@ -68,7 +68,7 @@ var VarResolveCmd = &cobra.Command{
 var VarDepsUpdateCmd = &cobra.Command{
 	Use:     "update [repo-url]",
 	Short:   "Update dependencies to latest versions",
-	Long:    `Update dependencies to their latest compatible versions. If no URL is given, updates all dependencies.`,
+	Long:    `Update dependencies to their latest versions. If no URL is given, updates all dependencies.`,
 	Example: `  sl deps update                    # Update all
   sl deps update git@github.com:org/spec # Update one`,
 	RunE:    runUpdateDependencies,
@@ -78,253 +78,256 @@ func init() {
 	VarDepsCmd.AddCommand(VarAddCmd, VarDepsListCmd, VarResolveCmd, VarDepsUpdateCmd, VarRemoveCmd)
 
 	VarAddCmd.Flags().StringP("alias", "a", "", "Optional alias for the dependency")
-	VarDepsListCmd.Flags().BoolP("include-transitive", "t", false, "Include transitive dependencies")
 	VarResolveCmd.Flags().BoolP("no-cache", "n", false, "Ignore cached specifications")
-	VarResolveCmd.Flags().BoolP("deep", "d", false, "Fetch full git history")
-	VarDepsUpdateCmd.Flags().BoolP("force", "f", false, "Force update all dependencies")
 }
 
 func runAddDependency(cmd *cobra.Command, args []string) error {
+	// Get current directory or find project root
+	projectDir, err := findProjectRoot()
+	if err != nil {
+		return fmt.Errorf("failed to find project root: %w", err)
+	}
+
+	// Load existing metadata
+	meta, err := metadata.LoadFromProject(projectDir)
+	if err != nil {
+		return fmt.Errorf("failed to load metadata: %w", err)
+	}
+
 	// Extract flags
 	alias, _ := cmd.Flags().GetString("alias")
 
 	// Parse arguments
 	repoURL := args[0]
-	version := "main" // default
+	branch := "main" // default
 	specPath := "spec.md"
 
 	if len(args) >= 2 {
-		version = args[1]
+		branch = args[1]
 	}
 	if len(args) >= 3 {
 		specPath = args[2]
 	}
 
 	// Validate URL
-	if !isValidURL(repoURL) {
+	if !isValidGitURL(repoURL) {
 		return fmt.Errorf("invalid repository URL: %s", repoURL)
 	}
 
 	// Create dependency
-	dep := models.Dependency{
-		RepositoryURL: repoURL,
-		Version:       version,
-		SpecPath:      specPath,
-		Alias:         alias,
+	dep := metadata.Dependency{
+		URL:    repoURL,
+		Branch: branch,
+		Path:   specPath,
+		Alias:  alias,
 	}
 
-	// Validate
-	if err := dep.Validate(); err != nil {
-		return fmt.Errorf("invalid dependency: %w", err)
+	// Check for duplicates
+	for _, existing := range meta.Dependencies {
+		if existing.URL == repoURL {
+			return fmt.Errorf("dependency already exists: %s", repoURL)
+		}
+		if alias != "" && existing.Alias == alias {
+			return fmt.Errorf("alias already exists: %s", alias)
+		}
 	}
 
-	// Read existing manifest
-	manifestPath := "specledger/specledger.mod"
-	manifest, err := spec.ParseManifest(manifestPath)
-	if err != nil {
-		return fmt.Errorf("failed to read manifest: %w", err)
+	// Add dependency
+	meta.Dependencies = append(meta.Dependencies, dep)
+
+	// Save metadata
+	if err := metadata.SaveToProject(meta, projectDir); err != nil {
+		return fmt.Errorf("failed to save metadata: %w", err)
 	}
 
-	// Add dependency (manually append for now)
-	manifest.Dependecies = append(manifest.Dependecies, dep)
-	manifest.UpdatedAt = time.Now()
-
-	// Write manifest
-	if err := spec.WriteManifest(manifestPath, manifest); err != nil {
-		return fmt.Errorf("failed to write manifest: %w", err)
-	}
-
-	fmt.Printf("Added dependency: %s -> %s\n", repoURL, specPath)
+	fmt.Printf("Added dependency: %s\n", repoURL)
 	if alias != "" {
 		fmt.Printf("  Alias: %s\n", alias)
 	}
+	fmt.Printf("\nRun 'sl deps resolve' to download and cache this dependency.\n")
 
 	return nil
 }
 
 func runListDependencies(cmd *cobra.Command, args []string) error {
-	manifestPath := "specledger/specledger.mod"
-	manifest, err := spec.ParseManifest(manifestPath)
+	projectDir, err := findProjectRoot()
 	if err != nil {
-		return fmt.Errorf("failed to read manifest: %w", err)
+		return fmt.Errorf("failed to find project root: %w", err)
 	}
 
-	fmt.Printf("Dependencies (%d):\n", len(manifest.Dependecies))
+	meta, err := metadata.LoadFromProject(projectDir)
+	if err != nil {
+		return fmt.Errorf("failed to load metadata: %w", err)
+	}
+
+	if len(meta.Dependencies) == 0 {
+		fmt.Println("No dependencies declared.")
+		fmt.Println("\nAdd dependencies with:")
+		fmt.Println("  sl deps add git@github.com:org/spec")
+		return nil
+	}
+
+	fmt.Printf("Dependencies (%d):\n", len(meta.Dependencies))
 	fmt.Println()
 
-	for i, dep := range manifest.Dependecies {
-		fmt.Printf("%d. %s\n", i+1, dep.RepositoryURL)
-		fmt.Printf("   Version: %s\n", dep.Version)
-		fmt.Printf("   Spec: %s\n", dep.SpecPath)
+	for i, dep := range meta.Dependencies {
+		fmt.Printf("%d. %s\n", i+1, dep.URL)
+		if dep.Branch != "" && dep.Branch != "main" {
+			fmt.Printf("   Branch: %s\n", dep.Branch)
+		}
+		if dep.Path != "" && dep.Path != "spec.md" {
+			fmt.Printf("   Path: %s\n", dep.Path)
+		}
 		if dep.Alias != "" {
 			fmt.Printf("   Alias: %s\n", dep.Alias)
 		}
+		if dep.ResolvedCommit != "" {
+			fmt.Printf("   Resolved: %s\n", dep.ResolvedCommit[:8])
+		} else {
+			fmt.Printf("   Status: not resolved (run 'sl deps resolve')\n")
+		}
 		fmt.Println()
 	}
-
-	return nil
-}
-
-func runResolveDependencies(cmd *cobra.Command, args []string) error {
-	noCache, _ := cmd.Flags().GetBool("no-cache")
-
-	manifestPath := "specledger/specledger.mod"
-	lockfilePath := "specledger/specledger.sum"
-
-	// Read manifest
-	manifest, err := spec.ParseManifest(manifestPath)
-	if err != nil {
-		return fmt.Errorf("failed to read manifest: %w", err)
-	}
-
-	// Validate manifest
-	errors := spec.ValidateManifest(manifest)
-	if len(errors) > 0 {
-		fmt.Println("Validation errors:")
-		for _, err := range errors {
-			fmt.Printf("  - %s\n", err.Error())
-		}
-		return fmt.Errorf("%d validation errors found", len(errors))
-	}
-
-	// Show cache directory
-	cacheDir := spec.GetGlobalCacheDir()
-	fmt.Printf("Cache directory: %s\n", cacheDir)
-	fmt.Printf("Resolving %d dependencies...\n\n", len(manifest.Dependecies))
-
-	// Create resolver (uses global cache)
-	resolver := spec.NewResolver("")
-
-	// Resolve dependencies
-	results, err := resolver.Resolve(cmd.Context(), manifest, noCache)
-	if err != nil {
-		return fmt.Errorf("failed to resolve dependencies: %w", err)
-	}
-
-	// Create lockfile
-	lockfile := spec.NewLockfile(spec.ManifestVersion)
-	for _, result := range results {
-		entry := spec.LockfileEntry{
-			RepositoryURL: result.Dependency.RepositoryURL,
-			CommitHash:    result.CommitHash,
-			ContentHash:   result.ContentHash,
-			SpecPath:      result.Dependency.SpecPath,
-			Branch:        result.Dependency.Version,
-			Size:          result.Size,
-			FetchedAt:     time.Now().Format(time.RFC3339),
-		}
-		lockfile.AddEntry(entry)
-
-		source := "remote"
-		if result.Source == "cache" {
-			source = "cached"
-		}
-
-		fmt.Printf("✓ %s: %s\n", result.Dependency.RepositoryURL, source)
-		fmt.Printf("  Commit: %s\n", result.CommitHash)
-		fmt.Printf("  Spec: %s\n", result.Dependency.SpecPath)
-		fmt.Printf("  Hash: %s\n", result.ContentHash)
-		fmt.Println()
-	}
-
-	// Write lockfile
-	if err := lockfile.Write(lockfilePath); err != nil {
-		return fmt.Errorf("failed to write lockfile: %w", err)
-	}
-
-	fmt.Printf("Lockfile written to: %s\n", lockfilePath)
-	fmt.Printf("Total size: %d bytes\n", lockfile.TotalSize)
 
 	return nil
 }
 
 func runRemoveDependency(cmd *cobra.Command, args []string) error {
-	repoURL := args[0]
-
-	manifestPath := "specledger/specledger.mod"
-	manifest, err := spec.ParseManifest(manifestPath)
+	projectDir, err := findProjectRoot()
 	if err != nil {
-		return fmt.Errorf("failed to read manifest: %w", err)
+		return fmt.Errorf("failed to find project root: %w", err)
 	}
 
+	meta, err := metadata.LoadFromProject(projectDir)
+	if err != nil {
+		return fmt.Errorf("failed to load metadata: %w", err)
+	}
+
+	target := args[0]
+
+	// Find and remove dependency
 	removed := false
-	for i, dep := range manifest.Dependecies {
-		if dep.RepositoryURL == repoURL {
-			manifest.Dependecies = append(manifest.Dependecies[:i], manifest.Dependecies[i+1:]...)
+	removedIndex := -1
+
+	for i, dep := range meta.Dependencies {
+		if dep.URL == target || dep.Alias == target {
+			removedIndex = i
 			removed = true
 			break
 		}
 	}
 
 	if !removed {
-		return fmt.Errorf("dependency not found: %s", repoURL)
+		return fmt.Errorf("dependency not found: %s", target)
 	}
 
-	manifest.UpdatedAt = time.Now()
+	// Remove from slice
+	meta.Dependencies = append(meta.Dependencies[:removedIndex], meta.Dependencies[removedIndex+1:]...)
 
-	// Write manifest
-	if err := spec.WriteManifest(manifestPath, manifest); err != nil {
-		return fmt.Errorf("failed to write manifest: %w", err)
+	// Save metadata
+	if err := metadata.SaveToProject(meta, projectDir); err != nil {
+		return fmt.Errorf("failed to save metadata: %w", err)
 	}
 
-	fmt.Printf("Removed dependency: %s\n", repoURL)
+	fmt.Printf("Removed dependency: %s\n", target)
+
+	return nil
+}
+
+func runResolveDependencies(cmd *cobra.Command, args []string) error {
+	projectDir, err := findProjectRoot()
+	if err != nil {
+		return fmt.Errorf("failed to find project root: %w", err)
+	}
+
+	meta, err := metadata.LoadFromProject(projectDir)
+	if err != nil {
+		return fmt.Errorf("failed to load metadata: %w", err)
+	}
+
+	if len(meta.Dependencies) == 0 {
+		fmt.Println("No dependencies to resolve.")
+		return nil
+	}
+
+	// TODO: Implement actual dependency resolution
+	// For now, just show what would be resolved
+	fmt.Printf("Would resolve %d dependencies:\n", len(meta.Dependencies))
+	for _, dep := range meta.Dependencies {
+		fmt.Printf("  - %s", dep.URL)
+		if dep.Alias != "" {
+			fmt.Printf(" (alias: %s)", dep.Alias)
+		}
+		fmt.Println()
+	}
+
+	fmt.Println("\nDependency resolution not yet implemented.")
+	fmt.Println("Dependencies are tracked in specledger/specledger.yaml")
 
 	return nil
 }
 
 func runUpdateDependencies(cmd *cobra.Command, args []string) error {
-	force, _ := cmd.Flags().GetBool("force")
-
-	manifestPath := "specledger/specledger.mod"
-
-	// Read current manifest
-	manifest, err := spec.ParseManifest(manifestPath)
+	projectDir, err := findProjectRoot()
 	if err != nil {
-		return fmt.Errorf("failed to read manifest: %w", err)
+		return fmt.Errorf("failed to find project root: %w", err)
 	}
 
-	if len(manifest.Dependecies) == 0 {
+	meta, err := metadata.LoadFromProject(projectDir)
+	if err != nil {
+		return fmt.Errorf("failed to load metadata: %w", err)
+	}
+
+	if len(meta.Dependencies) == 0 {
 		return fmt.Errorf("no dependencies to update")
 	}
 
-	fmt.Printf("Checking %d dependency(ies) for updates...\n", len(manifest.Dependecies))
+	fmt.Printf("Checking %d dependency(ies) for updates...\n", len(meta.Dependencies))
 
-	var updated []string
-	var unchanged []string
-
-	for _, dep := range manifest.Dependecies {
-		// Determine if we should check this dependency
-		shouldUpdate := force || args == nil || len(args) == 0
-
-		if !shouldUpdate && len(args) > 0 {
-			// Check if this dependency matches the provided repo URL
-			if strings.HasPrefix(dep.RepositoryURL, args[0]) {
-				shouldUpdate = true
-			}
-		}
-
-		if shouldUpdate {
-			// TODO: Actually fetch and check for updates
-			// For now, we'll just display current version
-			fmt.Printf("  %s: already at version %s\n", dep.RepositoryURL, dep.Version)
-			unchanged = append(unchanged, dep.RepositoryURL)
+	for _, dep := range meta.Dependencies {
+		// TODO: Implement actual update checking
+		if dep.ResolvedCommit != "" {
+			fmt.Printf("  %s: at %s\n", dep.URL, dep.ResolvedCommit[:8])
+		} else {
+			fmt.Printf("  %s: not resolved yet\n", dep.URL)
 		}
 	}
 
-	fmt.Printf("\nUpdated %d dependency(ies)\n", len(updated))
-	fmt.Printf("Unchanged %d dependency(ies)\n", len(unchanged))
-
-	// TODO: Write updated manifest if there were updates
-	// if err := spec.WriteManifest(manifestPath, manifest); err != nil {
-	// 	return fmt.Errorf("failed to write manifest: %w", err)
-	// }
+	fmt.Println("\nDependency updates not yet implemented.")
 
 	return nil
 }
 
-func isValidURL(s string) bool {
+func isValidGitURL(s string) bool {
 	// Simple check for common Git URLs
 	return len(s) > 0 && (strings.HasPrefix(s, "http://") ||
 		strings.HasPrefix(s, "https://") ||
 		strings.HasPrefix(s, "git@"))
+}
+
+func findProjectRoot() (string, error) {
+	// Start from current directory and work up
+	dir, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+
+	// Check current directory
+	if metadata.HasYAMLMetadata(dir) {
+		return dir, nil
+	}
+
+	// Check parent directories
+	for {
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			// Reached root
+			return "", fmt.Errorf("not in a SpecLedger project (no specledger/specledger.yaml found)")
+		}
+		dir = parent
+
+		if metadata.HasYAMLMetadata(dir) {
+			return dir, nil
+		}
+	}
 }

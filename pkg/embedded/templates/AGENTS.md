@@ -106,7 +106,7 @@ sl deps remove git@github.com:org/api-spec
 
 ### File Structure
 
-- `specledger/specledger.mod` - Dependency manifest (add/remove/update deps here)
+- `specledger/specledger.yaml` - Dependency manifest (add/remove/update deps here)
 - `specledger/specledger.sum` - Lockfile with resolved commits and hashes
 - `~/.specledger/cache/` - Local cache of downloaded dependencies
 
