@@ -122,9 +122,9 @@ func runBootstrapInteractive(l *logger.Logger, cfg *config.Config) error {
 	if err := prerequisites.EnsurePrerequisites(true); err != nil {
 		// Continue anyway - prerequisites are helpful but not blocking
 		fmt.Printf("⚠️  %v\n", err)
-		fmt.Println("Continuing with bootstrap...\n")
+		fmt.Println("Continuing with bootstrap...")
 	} else {
-		fmt.Println("✓ All prerequisites installed\n")
+		fmt.Println("✓ All prerequisites installed")
 	}
 
 	// Create project path
