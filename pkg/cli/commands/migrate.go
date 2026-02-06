@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"specledger/pkg/cli/metadata"
+	"specledger/pkg/cli/ui"
 )
 
 // VarMigrateCmd represents the migrate command
@@ -59,7 +60,9 @@ func runMigrate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("specledger.yaml already exists. Use --force to overwrite (not implemented yet)")
 	}
 
-	fmt.Printf("Migrating specledger.mod to specledger.yaml in %s\n", absDir)
+	ui.PrintSection("Migrating to YAML Format")
+	fmt.Printf("Directory: %s\n", ui.Bold(absDir))
+	fmt.Println()
 
 	// Parse the .mod file to show preview
 	modPath := filepath.Join(absDir, "specledger", "specledger.mod")
@@ -70,11 +73,14 @@ func runMigrate(cmd *cobra.Command, args []string) error {
 
 	// Show what would be done
 	if migrateDryRun {
-		fmt.Println("\nDry run - would create:")
-		fmt.Printf("  Project: %s (short code: %s)\n", modData.ProjectName, modData.ShortCode)
-		fmt.Printf("  Framework: none (default for migrated projects)\n")
-		fmt.Printf("  Dependencies: 0\n")
-		fmt.Println("\nOriginal .mod file would be backed up as: specledger.spec.mod.backup")
+		ui.PrintSection("Dry Run Preview")
+		fmt.Printf("  Project:     %s\n", ui.Bold(modData.ProjectName))
+		fmt.Printf("  Short Code:  %s\n", ui.Bold(modData.ShortCode))
+		fmt.Printf("  Framework:   %s\n", ui.Bold("none (default for migrated projects)"))
+		fmt.Printf("  Dependencies: %s\n", ui.Bold("0"))
+		fmt.Println()
+		fmt.Printf("Backup: %s\n", ui.Cyan("specledger.spec.mod.backup"))
+		fmt.Println()
 		return nil
 	}
 
@@ -87,18 +93,21 @@ func runMigrate(cmd *cobra.Command, args []string) error {
 	// Backup the .mod file
 	backupPath := filepath.Join(absDir, "specledger", "specledger.spec.mod.backup")
 	if err := os.Rename(modPath, backupPath); err != nil {
-		fmt.Printf("Warning: failed to backup .mod file: %v\n", err)
+		ui.PrintWarning(fmt.Sprintf("Failed to backup .mod file: %v", err))
 	} else {
-		fmt.Printf("  Backup: %s\n", backupPath)
+		fmt.Printf("  Backup: %s\n", ui.Cyan(backupPath))
 	}
 
-	fmt.Printf("\n✓ Migration complete!\n")
-	fmt.Printf("  Project: %s (short code: %s)\n", meta.Project.Name, meta.Project.ShortCode)
-	fmt.Printf("  Framework: %s\n", meta.Framework.Choice)
-	fmt.Println("\nNext steps:")
+	fmt.Println()
+	ui.PrintSuccess("Migration Complete!")
+	fmt.Printf("  Project:     %s (short code: %s)\n", ui.Bold(meta.Project.Name), ui.Bold(meta.Project.ShortCode))
+	fmt.Printf("  Framework:   %s\n", ui.Bold(string(meta.Framework.Choice)))
+	fmt.Println()
+	fmt.Println(ui.Bold("Next steps:"))
 	fmt.Println("  1. Review the generated specledger.yaml")
 	fmt.Println("  2. Edit framework choice if desired (none/speckit/openspec/both)")
-	fmt.Println("  3. Optionally remove the backup file: rm specledger.spec.mod.backup")
+	fmt.Printf("  3. Optionally remove the backup file: %s\n", ui.Cyan("rm specledger.spec.mod.backup"))
+	fmt.Println()
 
 	return nil
 }

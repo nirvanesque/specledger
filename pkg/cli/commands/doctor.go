@@ -3,9 +3,13 @@ package commands
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
+	"specledger/pkg/cli/metadata"
 	"specledger/pkg/cli/prerequisites"
+	"specledger/pkg/cli/ui"
 )
 
 var (
@@ -25,7 +29,9 @@ This command verifies that:
 Use --json flag for machine-readable output suitable for CI/CD pipelines.`,
 	Example: `  sl doctor           # Human-readable output
   sl doctor --json    # JSON output for CI/CD`,
-	RunE: runDoctor,
+	RunE:         runDoctor,
+	SilenceUsage: true, // Don't print usage on error
+	SilenceErrors: true, // Don't print error message from return (we handle it in UI)
 }
 
 func init() {
@@ -34,10 +40,10 @@ func init() {
 
 // DoctorOutput represents the JSON output structure for doctor command
 type DoctorOutput struct {
-	Status              string              `json:"status"`
-	Tools               []DoctorToolStatus  `json:"tools"`
-	Missing             []string            `json:"missing,omitempty"`
-	InstallInstructions string              `json:"install_instructions,omitempty"`
+	Status              string             `json:"status"`
+	Tools               []DoctorToolStatus `json:"tools"`
+	Missing             []string           `json:"missing,omitempty"`
+	InstallInstructions string             `json:"install_instructions,omitempty"`
 }
 
 // DoctorToolStatus represents a tool's status in JSON output
@@ -107,56 +113,176 @@ func outputDoctorJSON(check prerequisites.PrerequisiteCheck) error {
 }
 
 func outputDoctorHuman(check prerequisites.PrerequisiteCheck) error {
-	fmt.Println()
-	fmt.Println("SpecLedger Tool Status")
-	fmt.Println("======================")
-	fmt.Println()
+	// Header
+	ui.PrintHeader("SpecLedger Doctor", "Environment Check", 58)
 
 	// Core tools section
-	fmt.Println("Core Tools (Required):")
+	fmt.Println(ui.Bold("Core Tools"))
+	fmt.Println(ui.Cyan("──────────"))
+	fmt.Println()
+
 	for _, result := range check.CoreResults {
-		fmt.Printf("  %s\n", prerequisites.FormatToolStatus(result))
+		name := result.Tool.DisplayName
+		versionInfo := ""
+		status := ui.Crossmark() + " "
+		if result.Installed {
+			status = ui.Checkmark() + " "
+			if result.Version != "" {
+				versionInfo = ui.Dim(fmt.Sprintf("(%s)", result.Version))
+			}
+		}
+		fmt.Printf("  %s%s%s\n", status, ui.Bold(name), versionInfo)
 	}
 	fmt.Println()
 
 	// Framework tools section
-	fmt.Println("Framework Tools (Optional):")
+	fmt.Println(ui.Bold("SDD Framework Tools"))
+	fmt.Println(ui.Cyan("──────────────────"))
+	fmt.Println()
+
 	for _, result := range check.FrameworkResults {
-		fmt.Printf("  %s\n", prerequisites.FormatToolStatus(result))
+		name := result.Tool.DisplayName
+		versionInfo := ""
+		status := ui.Crossmark() + " "
+		fwStatus := ""
+
+		if result.Installed {
+			status = ui.Checkmark() + " "
+			if result.Version != "" {
+				versionInfo = ui.Dim(fmt.Sprintf("(%s)", result.Version))
+			}
+
+			// Check if framework is initialized in current project
+			fwName := result.Tool.Name
+			projectDir, _ := os.Getwd()
+			if metadata.HasYAMLMetadata(projectDir) {
+				if meta, _ := metadata.LoadFromProject(projectDir); meta != nil {
+					var chosen bool
+					switch fwName {
+					case "specify":
+						chosen = meta.Framework.Choice == metadata.FrameworkSpecKit || meta.Framework.Choice == metadata.FrameworkBoth
+					case "openspec":
+						chosen = meta.Framework.Choice == metadata.FrameworkOpenSpec || meta.Framework.Choice == metadata.FrameworkBoth
+					}
+					if chosen {
+						if isFrameworkInitialized(fwName) {
+							fwStatus = ui.Dim("(initialized)")
+						} else {
+							fwStatus = ui.Yellow("(not initialized)")
+						}
+					}
+				}
+			}
+		}
+		fmt.Printf("  %s%s%s %s\n", status, ui.Bold(name), versionInfo, fwStatus)
 	}
 	fmt.Println()
 
+	// Check if we're in a SpecLedger project and show framework init commands
+	projectDir, err := os.Getwd()
+	if err == nil && metadata.HasYAMLMetadata(projectDir) {
+		meta, loadErr := metadata.LoadFromProject(projectDir)
+		if loadErr == nil {
+			showFrameworkInitCommands(check, meta)
+		}
+	}
+
 	// Overall status
 	if check.AllCoreInstalled {
-		fmt.Println("✅ All core tools are installed!")
-		fmt.Println()
-
-		// Check if any framework tools are installed
-		anyFrameworkInstalled := false
-		for _, result := range check.FrameworkResults {
-			if result.Installed {
-				anyFrameworkInstalled = true
-				break
-			}
-		}
-
-		if !anyFrameworkInstalled {
-			fmt.Println("ℹ️  No SDD framework tools detected.")
-			fmt.Println("   To use Spec Kit or OpenSpec, install via mise:")
-			fmt.Println()
-			for _, tool := range prerequisites.FrameworkTools {
-				fmt.Printf("   %s\n", tool.InstallCmd)
-			}
-			fmt.Println()
-		}
-
+		ui.PrintBox("All core tools installed", ui.Green, 54)
 		return nil
 	}
 
-	// Missing tools
-	fmt.Println("❌ Missing required tools:")
+	// Missing tools - print error and return error for exit code
+	// SilenceUsage: true prevents Cobra from printing help message
+	ui.PrintBox("Missing required tools", ui.Red, 54)
 	fmt.Println()
 	fmt.Println(check.Instructions)
 
 	return fmt.Errorf("missing required tools")
+}
+
+// showFrameworkInitCommands shows commands to initialize frameworks that need it
+func showFrameworkInitCommands(check prerequisites.PrerequisiteCheck, meta *metadata.ProjectMetadata) {
+	commandsToShow := []struct {
+		framework    string
+		fwName       string
+		initCmd      string
+		installCmd   string
+	}{
+		{"Spec Kit", "specify", "specify init --here --ai claude --force --script sh --no-git", "mise install pipx:git+https://github.com/github/spec-kit.git"},
+		{"OpenSpec", "openspec", "openspec init --force --tools claude", "mise install npm:@fission-ai/openspec"},
+	}
+
+	anyNeeded := false
+	for _, fc := range commandsToShow {
+		var installed, chosen bool
+
+		// Check if framework was chosen
+		switch fc.framework {
+		case "Spec Kit":
+			chosen = meta.Framework.Choice == metadata.FrameworkSpecKit || meta.Framework.Choice == metadata.FrameworkBoth
+		case "OpenSpec":
+			chosen = meta.Framework.Choice == metadata.FrameworkOpenSpec || meta.Framework.Choice == metadata.FrameworkBoth
+		}
+
+		if !chosen {
+			continue
+		}
+
+		// Check if installed
+		for _, result := range check.FrameworkResults {
+			if result.Tool.Name == fc.fwName {
+				installed = result.Installed
+				break
+			}
+		}
+
+		// Show different sections based on state
+		if !installed {
+			if !anyNeeded {
+				fmt.Println(ui.Bold("Framework Installation"))
+				fmt.Println(ui.Cyan("─────────────────────"))
+				anyNeeded = true
+			}
+			fmt.Printf("  %s: %s\n", ui.Bold(fc.framework), ui.Dim(fc.installCmd))
+		} else if installed && !isFrameworkInitialized(fc.fwName) {
+			if !anyNeeded {
+				fmt.Println(ui.Bold("Framework Initialization"))
+				fmt.Println(ui.Cyan("─────────────────────"))
+				anyNeeded = true
+			}
+			fmt.Printf("  %s: %s\n", ui.Bold(fc.framework), ui.Yellow(fc.initCmd))
+		}
+	}
+
+	if anyNeeded {
+		fmt.Println()
+	}
+}
+
+// isFrameworkInitialized checks if a framework is already initialized in the project
+func isFrameworkInitialized(framework string) bool {
+	dir, err := os.Getwd()
+	if err != nil {
+		return false
+	}
+
+	switch framework {
+	case "specify":
+		// Check for .specify directory or specify.yaml
+		specifyDir := filepath.Join(dir, ".specify")
+		specifyYaml := filepath.Join(dir, "specify.yaml")
+		_, err1 := os.Stat(specifyDir)
+		_, err2 := os.Stat(specifyYaml)
+		return err1 == nil || err2 == nil
+	case "openspec":
+		// Check for .openspec directory or openspec.yaml
+		openspecDir := filepath.Join(dir, ".openspec")
+		openspecYaml := filepath.Join(dir, "openspec.yaml")
+		_, err1 := os.Stat(openspecDir)
+		_, err2 := os.Stat(openspecYaml)
+		return err1 == nil || err2 == nil
+	}
+	return false
 }

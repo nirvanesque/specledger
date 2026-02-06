@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"specledger/pkg/cli/metadata"
+	"specledger/pkg/cli/ui"
 )
 
 // VarDepsCmd represents the deps command
@@ -140,11 +141,16 @@ func runAddDependency(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to save metadata: %w", err)
 	}
 
-	fmt.Printf("Added dependency: %s\n", repoURL)
+	ui.PrintSuccess("Dependency added")
+	fmt.Printf("  Repository:  %s\n", ui.Bold(repoURL))
 	if alias != "" {
-		fmt.Printf("  Alias: %s\n", alias)
+		fmt.Printf("  Alias:       %s\n", ui.Bold(alias))
 	}
-	fmt.Printf("\nRun 'sl deps resolve' to download and cache this dependency.\n")
+	fmt.Printf("  Branch:      %s\n", ui.Bold(branch))
+	fmt.Printf("  Path:        %s\n", ui.Bold(specPath))
+	fmt.Println()
+	fmt.Printf("Next: %s\n", ui.Cyan("sl deps resolve"))
+	fmt.Println()
 
 	return nil
 }
@@ -161,30 +167,33 @@ func runListDependencies(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(meta.Dependencies) == 0 {
+		ui.PrintSection("Dependencies")
 		fmt.Println("No dependencies declared.")
-		fmt.Println("\nAdd dependencies with:")
-		fmt.Println("  sl deps add git@github.com:org/spec")
+		fmt.Println()
+		fmt.Println(ui.Bold("Add dependencies with:"))
+		fmt.Printf("  %s\n", ui.Cyan("sl deps add git@github.com:org/spec"))
+		fmt.Println()
 		return nil
 	}
 
-	fmt.Printf("Dependencies (%d):\n", len(meta.Dependencies))
+	ui.PrintHeader("Dependencies", fmt.Sprintf("%d total", len(meta.Dependencies)), 70)
 	fmt.Println()
 
 	for i, dep := range meta.Dependencies {
-		fmt.Printf("%d. %s\n", i+1, dep.URL)
+		fmt.Printf("%s. %s\n", ui.Bold(fmt.Sprintf("%d", i+1)), ui.Bold(dep.URL))
 		if dep.Branch != "" && dep.Branch != "main" {
-			fmt.Printf("   Branch: %s\n", dep.Branch)
+			fmt.Printf("   Branch:  %s\n", ui.Cyan(dep.Branch))
 		}
 		if dep.Path != "" && dep.Path != "spec.md" {
-			fmt.Printf("   Path: %s\n", dep.Path)
+			fmt.Printf("   Path:    %s\n", ui.Cyan(dep.Path))
 		}
 		if dep.Alias != "" {
-			fmt.Printf("   Alias: %s\n", dep.Alias)
+			fmt.Printf("   Alias:   %s\n", ui.Cyan(dep.Alias))
 		}
 		if dep.ResolvedCommit != "" {
-			fmt.Printf("   Resolved: %s\n", dep.ResolvedCommit[:8])
+			fmt.Printf("   Status:  %s %s\n", ui.Green("✓"), ui.Gray(dep.ResolvedCommit[:8]))
 		} else {
-			fmt.Printf("   Status: not resolved (run 'sl deps resolve')\n")
+			fmt.Printf("   Status:  %s (run %s)\n", ui.Yellow("not resolved"), ui.Cyan("sl deps resolve"))
 		}
 		fmt.Println()
 	}
@@ -229,7 +238,9 @@ func runRemoveDependency(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to save metadata: %w", err)
 	}
 
-	fmt.Printf("Removed dependency: %s\n", target)
+	ui.PrintSuccess("Dependency removed")
+	fmt.Printf("  %s\n", ui.Bold(target))
+	fmt.Println()
 
 	return nil
 }
@@ -246,23 +257,26 @@ func runResolveDependencies(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(meta.Dependencies) == 0 {
-		fmt.Println("No dependencies to resolve.")
+		ui.PrintWarning("No dependencies to resolve")
 		return nil
 	}
 
+	ui.PrintSection("Resolving Dependencies")
 	// TODO: Implement actual dependency resolution
 	// For now, just show what would be resolved
-	fmt.Printf("Would resolve %d dependencies:\n", len(meta.Dependencies))
+	fmt.Printf("Would resolve %s dependencies:\n", ui.Bold(fmt.Sprintf("%d", len(meta.Dependencies))))
+	fmt.Println()
 	for _, dep := range meta.Dependencies {
-		fmt.Printf("  - %s", dep.URL)
+		fmt.Printf("  - %s", ui.Bold(dep.URL))
 		if dep.Alias != "" {
-			fmt.Printf(" (alias: %s)", dep.Alias)
+			fmt.Printf(" (alias: %s)", ui.Cyan(dep.Alias))
 		}
 		fmt.Println()
 	}
-
-	fmt.Println("\nDependency resolution not yet implemented.")
+	fmt.Println()
+	ui.PrintWarning("Dependency resolution not yet implemented")
 	fmt.Println("Dependencies are tracked in specledger/specledger.yaml")
+	fmt.Println()
 
 	return nil
 }
@@ -282,18 +296,21 @@ func runUpdateDependencies(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("no dependencies to update")
 	}
 
-	fmt.Printf("Checking %d dependency(ies) for updates...\n", len(meta.Dependencies))
+	ui.PrintSection("Checking for Updates")
+	fmt.Printf("Checking %s dependencies for updates...\n", ui.Bold(fmt.Sprintf("%d", len(meta.Dependencies))))
+	fmt.Println()
 
 	for _, dep := range meta.Dependencies {
 		// TODO: Implement actual update checking
 		if dep.ResolvedCommit != "" {
-			fmt.Printf("  %s: at %s\n", dep.URL, dep.ResolvedCommit[:8])
+			fmt.Printf("  %s: at %s\n", ui.Bold(dep.URL), ui.Gray(dep.ResolvedCommit[:8]))
 		} else {
-			fmt.Printf("  %s: not resolved yet\n", dep.URL)
+			fmt.Printf("  %s: %s\n", ui.Bold(dep.URL), ui.Yellow("not resolved yet"))
 		}
 	}
-
-	fmt.Println("\nDependency updates not yet implemented.")
+	fmt.Println()
+	ui.PrintWarning("Dependency updates not yet implemented")
+	fmt.Println()
 
 	return nil
 }

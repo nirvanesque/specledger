@@ -1,0 +1,9 @@
+version: 1.0.0
+project:
+    name: specledger
+    short_code: sp
+    created: 2026-02-06T11:09:00.776972+08:00
+    modified: 2026-02-06T11:09:00.776973+08:00
+    version: 0.1.0
+framework:
+    choice: none

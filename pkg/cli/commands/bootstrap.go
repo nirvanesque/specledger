@@ -14,6 +14,7 @@ import (
 	"specledger/pkg/cli/metadata"
 	"specledger/pkg/cli/prerequisites"
 	"specledger/pkg/cli/tui"
+	"specledger/pkg/cli/ui"
 	"specledger/pkg/embedded"
 )
 
@@ -26,6 +27,7 @@ var (
 	// Init-specific flags
 	initShortCodeFlag string
 	initForceFlag     bool
+	initFrameworkFlag string
 )
 
 // VarBootstrapCmd is the bootstrap command
@@ -78,14 +80,19 @@ This adds SpecLedger to an existing project without creating a new directory.
 Usage:
   sl init
   sl init --short-code abc
+  sl init --framework speckit
 
 The init creates:
 - .claude/ directory with skills
 - .beads/ directory for issue tracking
 - specledger/ directory for specifications
-- specledger/specledger.yaml file for project metadata`,
+- specledger/specledger.yaml file for project metadata
 
-	// RunE is called when the command is executed
+Framework options:
+- none: No SDD framework (default)
+- speckit: Use GitHub Spec Kit
+- openspec: Use OpenSpec
+- both: Initialize both frameworks`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		l := logger.New(logger.Debug)
 		return runInit(l)
@@ -118,13 +125,14 @@ func runBootstrapInteractive(l *logger.Logger, cfg *config.Config) error {
 	framework := answers["framework"]
 
 	// Check prerequisites before starting
-	fmt.Println("\nChecking prerequisites...")
+	fmt.Println()
+	ui.PrintSection("Checking Prerequisites")
 	if err := prerequisites.EnsurePrerequisites(true); err != nil {
 		// Continue anyway - prerequisites are helpful but not blocking
-		fmt.Printf("⚠️  %v\n", err)
+		fmt.Printf("%s %v\n", ui.WarningIcon(), err)
 		fmt.Println("Continuing with bootstrap...")
 	} else {
-		fmt.Println("✓ All prerequisites installed")
+		fmt.Printf("%s All prerequisites installed\n", ui.Checkmark())
 	}
 
 	// Create project path
@@ -163,10 +171,10 @@ func runBootstrapInteractive(l *logger.Logger, cfg *config.Config) error {
 		return fmt.Errorf("failed to create project metadata: %w", err)
 	}
 
-	// Install and initialize frameworks
-	if err := installAndInitFrameworks(projectPath, frameworkChoice); err != nil {
-		// Don't fail bootstrap if framework init fails
-		fmt.Printf("⚠️  Framework initialization had issues: %v\n", err)
+	// Initialize the chosen SDD framework
+	if err := initializeFramework(projectPath, frameworkChoice); err != nil {
+		// Framework init failure is not fatal - log and continue
+		fmt.Printf("Warning: framework initialization had issues: %v\n", err)
 	}
 
 	// Initialize git repo (but don't commit - user might bootstrap into existing repo)
@@ -175,15 +183,22 @@ func runBootstrapInteractive(l *logger.Logger, cfg *config.Config) error {
 	}
 
 	// Success message
-	fmt.Printf("\n✓ Project created: %s\n", projectPath)
-	fmt.Printf("✓ Beads prefix: %s\n", shortCode)
-	fmt.Printf("✓ SDD Framework: %s\n", framework)
+	ui.PrintHeader("Project Created Successfully", "", 60)
+	fmt.Printf("  Path:       %s\n", ui.Bold(projectPath))
+	fmt.Printf("  Beads:      %s\n", ui.Bold(shortCode))
+	fmt.Printf("  Framework:  %s\n", ui.Bold(framework))
 	if framework != "none" {
-		fmt.Printf("✓ Framework tools enabled and initialized\n")
+		if framework == "both" {
+			fmt.Printf("  Status:     %s\n", ui.Green("Spec Kit initialized"))
+		} else {
+			fmt.Printf("  Status:     %s\n", ui.Green("Framework initialized"))
+		}
 	}
-	fmt.Printf("\nNext steps:\n")
-	fmt.Printf("  cd %s\n", projectPath)
-	fmt.Printf("  sl doctor       # Check tool installation status\n")
+	fmt.Println()
+	fmt.Println(ui.Bold("Next steps:"))
+	fmt.Printf("  %s    %s\n", ui.Cyan("cd"), projectPath)
+	fmt.Printf("  %s  %s\n", ui.Cyan("sl doctor"), ui.Dim("# Check tool installation status"))
+	fmt.Println()
 
 	return nil
 }
@@ -249,10 +264,10 @@ func runBootstrapNonInteractive(cmd *cobra.Command, l *logger.Logger, cfg *confi
 		return fmt.Errorf("failed to create project metadata: %w", err)
 	}
 
-	// Install and initialize frameworks
-	if err := installAndInitFrameworks(projectPath, frameworkChoice); err != nil {
-		// Don't fail bootstrap if framework init fails
-		fmt.Printf("⚠️  Framework initialization had issues: %v\n", err)
+	// Initialize the chosen SDD framework
+	if err := initializeFramework(projectPath, frameworkChoice); err != nil {
+		// Framework init failure is not fatal - log and continue
+		fmt.Printf("Warning: framework initialization had issues: %v\n", err)
 	}
 
 	// Initialize git repo (but don't commit - user might bootstrap into existing repo)
@@ -261,15 +276,15 @@ func runBootstrapNonInteractive(cmd *cobra.Command, l *logger.Logger, cfg *confi
 	}
 
 	// Success message
-	fmt.Printf("\n✓ Project created: %s\n", projectPath)
-	fmt.Printf("✓ Beads prefix: %s\n", shortCode)
-	fmt.Printf("✓ SDD Framework: %s\n", framework)
-	if framework != "none" {
-		fmt.Printf("✓ Framework tools enabled and initialized\n")
-	}
-	fmt.Printf("\nNext steps:\n")
-	fmt.Printf("  cd %s\n", projectPath)
-	fmt.Printf("  sl doctor       # Check tool status\n")
+	ui.PrintHeader("Project Created Successfully", "", 60)
+	fmt.Printf("  Path:       %s\n", ui.Bold(projectPath))
+	fmt.Printf("  Beads:      %s\n", ui.Bold(shortCode))
+	fmt.Printf("  Framework:  %s\n", ui.Bold(framework))
+	fmt.Println()
+	fmt.Println(ui.Bold("Next steps:"))
+	fmt.Printf("  %s    %s\n", ui.Cyan("cd"), projectPath)
+	fmt.Printf("  %s  %s\n", ui.Cyan("sl doctor"), ui.Dim("# Check tool status"))
+	fmt.Println()
 
 	return nil
 }
@@ -311,9 +326,10 @@ func runInit(l *logger.Logger) error {
 		shortCode = shortCode[:4]
 	}
 
-	fmt.Printf("Initializing SpecLedger in: %s\n", projectPath)
-	fmt.Printf("Project: %s\n", projectName)
-	fmt.Printf("Short code: %s\n", shortCode)
+	ui.PrintSection("Initializing SpecLedger")
+	fmt.Printf("  Directory:  %s\n", ui.Bold(projectPath))
+	fmt.Printf("  Project:    %s\n", ui.Bold(projectName))
+	fmt.Printf("  Short Code: %s\n", ui.Bold(shortCode))
 	fmt.Println()
 
 	// Copy templates (excluding specledger/FORK.md which is for new projects)
@@ -321,22 +337,47 @@ func runInit(l *logger.Logger) error {
 		return fmt.Errorf("failed to copy templates: %w", err)
 	}
 
-	// Create YAML metadata (default to "none" framework for sl init)
-	projectMetadata := metadata.NewProjectMetadata(projectName, shortCode, metadata.FrameworkNone)
+	// Determine framework choice (default to "none" for sl init)
+	frameworkChoice := metadata.FrameworkChoice(initFrameworkFlag)
+	if initFrameworkFlag == "" {
+		frameworkChoice = metadata.FrameworkNone
+	}
+
+	// Create YAML metadata with framework choice
+	projectMetadata := metadata.NewProjectMetadata(projectName, shortCode, frameworkChoice)
 	if err := metadata.SaveToProject(projectMetadata, projectPath); err != nil {
 		return fmt.Errorf("failed to create project metadata: %w", err)
 	}
 
+	// Update mise.toml if framework is specified
+	if frameworkChoice != metadata.FrameworkNone {
+		if err := updateMiseToml(projectPath, frameworkChoice); err != nil {
+			ui.PrintWarning(fmt.Sprintf("Failed to update mise.toml: %v", err))
+		}
+
+		// Initialize the chosen SDD framework
+		if err := initializeFramework(projectPath, frameworkChoice); err != nil {
+			// Framework init failure is not fatal - log and continue
+			fmt.Printf("Warning: framework initialization had issues: %v\n", err)
+		}
+	}
+
 	// Success message
-	fmt.Printf("\n✓ SpecLedger initialized in: %s\n", projectPath)
-	fmt.Printf("✓ Beads prefix: %s\n", shortCode)
-	fmt.Printf("✓ Metadata: specledger/specledger.yaml\n")
-	fmt.Println("\nSpecLedger is ready to use!")
-	fmt.Println("\nNext steps:")
-	fmt.Println("  sl deps list              # List dependencies")
-	fmt.Println("  sl deps add <repo-url>    # Add a dependency")
-	fmt.Println("  bd create \"Task name\"     # Create an issue")
-	fmt.Println("  bd ready --limit 5        # Find work to do")
+	ui.PrintHeader("SpecLedger Initialized", "", 60)
+	fmt.Printf("  Directory:  %s\n", ui.Bold(projectPath))
+	fmt.Printf("  Beads:      %s\n", ui.Bold(shortCode))
+	fmt.Printf("  Metadata:   %s\n", ui.Bold("specledger/specledger.yaml"))
+	if frameworkChoice != metadata.FrameworkNone {
+		fmt.Printf("  Framework:  %s\n", ui.Bold(string(frameworkChoice)))
+	}
+	fmt.Println()
+	ui.PrintSuccess("SpecLedger is ready to use!")
+	fmt.Println(ui.Bold("Next steps:"))
+	fmt.Printf("  %s             %s\n", ui.Cyan("sl deps list"), ui.Dim("# List dependencies"))
+	fmt.Printf("  %s <repo-url> %s\n", ui.Cyan("sl deps add"), ui.Dim("# Add a dependency"))
+	fmt.Printf("  %s             %s\n", ui.Cyan("bd create"), ui.Dim("Create an issue"))
+	fmt.Printf("  %s             %s\n", ui.Cyan("bd ready"), ui.Dim("Find work to do"))
+	fmt.Println()
 
 	return nil
 }
@@ -430,7 +471,8 @@ func init() {
 
 	// Flags for 'init' command
 	VarInitCmd.PersistentFlags().StringVarP(&initShortCodeFlag, "short-code", "s", "", "Short code for issue IDs (2-4 letters)")
-	VarInitCmd.PersistentFlags().BoolVarP(&initForceFlag, "force", "f", false, "Force initialize even if SpecLedger files exist")
+	VarInitCmd.PersistentFlags().StringVarP(&initFrameworkFlag, "framework", "f", "none", "SDD framework (speckit, openspec, both, none)")
+	VarInitCmd.PersistentFlags().BoolVarP(&initForceFlag, "force", "", false, "Force initialize even if SpecLedger files exist")
 }
 
 // copyTemplates copies SpecLedger template files to the new project using embedded templates

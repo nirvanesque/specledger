@@ -48,13 +48,14 @@ func installAndInitFrameworks(projectPath string, framework metadata.FrameworkCh
 func initSpecKit(projectPath string) error {
 	fmt.Println("\nInitializing Spec Kit...")
 
-	cmd := exec.Command("specify", "init")
+	// Use --here flag to initialize in current directory
+	cmd := exec.Command("specify", "init", "--here")
 	cmd.Dir = projectPath
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		fmt.Printf("⚠️  Warning: Failed to initialize Spec Kit: %v\n", err)
 		fmt.Printf("Output: %s\n", string(output))
-		fmt.Println("You can manually initialize later with: cd", projectPath, "&& specify init")
+		fmt.Println("You can manually initialize later with: cd", projectPath, "&& specify init --here")
 		return nil // Don't fail bootstrap
 	}
 
