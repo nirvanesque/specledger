@@ -8,10 +8,11 @@ import (
 
 // ProjectMetadata represents specledger.yaml
 type ProjectMetadata struct {
-	Version      string       `yaml:"version"`
-	Project      ProjectInfo  `yaml:"project"`
-	Framework    FrameworkInfo `yaml:"framework"`
-	Dependencies []Dependency `yaml:"dependencies,omitempty"`
+	Version      string           `yaml:"version"`
+	Project      ProjectInfo      `yaml:"project"`
+	Framework    FrameworkInfo    `yaml:"framework"`
+	TaskTracker  TaskTrackerInfo  `yaml:"task_tracker,omitempty"`
+	Dependencies []Dependency     `yaml:"dependencies,omitempty"`
 }
 
 // ProjectInfo contains project identification
@@ -29,6 +30,12 @@ type FrameworkInfo struct {
 	InstalledAt *time.Time      `yaml:"installed_at,omitempty"`
 }
 
+// TaskTrackerInfo records task/issue tracker choice
+type TaskTrackerInfo struct {
+	Choice      TaskTrackerChoice `yaml:"choice"`
+	EnabledAt   *time.Time        `yaml:"enabled_at,omitempty"`
+}
+
 // FrameworkChoice is an enum
 type FrameworkChoice string
 
@@ -37,6 +44,14 @@ const (
 	FrameworkOpenSpec FrameworkChoice = "openspec"
 	FrameworkBoth     FrameworkChoice = "both"
 	FrameworkNone     FrameworkChoice = "none"
+)
+
+// TaskTrackerChoice is an enum for task/issue tracking systems
+type TaskTrackerChoice string
+
+const (
+	TaskTrackerBeads TaskTrackerChoice = "beads"
+	TaskTrackerNone  TaskTrackerChoice = "none"
 )
 
 // Dependency represents an external spec dependency

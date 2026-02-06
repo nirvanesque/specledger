@@ -90,6 +90,10 @@ func NewProjectMetadata(name, shortCode string, framework FrameworkChoice) *Proj
 		Framework: FrameworkInfo{
 			Choice: framework,
 		},
+		TaskTracker: TaskTrackerInfo{
+			Choice:    TaskTrackerBeads,
+			EnabledAt: &now,
+		},
 		Dependencies: []Dependency{},
 	}
 

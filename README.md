@@ -218,6 +218,11 @@ project:
 
 framework:
   choice: speckit  # speckit, openspec, both, or none
+  installed_at: "2026-02-05T10:30:00Z"
+
+task_tracker:
+  choice: beads  # beads, none
+  enabled_at: "2026-02-05T10:30:00Z"
 
 dependencies:
   - url: git@github.com:org/api-spec
@@ -225,6 +230,8 @@ dependencies:
     path: spec.md
     alias: api
     resolved_commit: abc123...
+    framework: speckit
+    import_path: "@api"
 ```
 
 ## Usage Examples
@@ -307,6 +314,32 @@ Next: sl deps resolve
 **AI Context**: The `import_path` field enables AI to reference dependencies like coding imports:
 - In specifications: `See @api/spec.md for the data models`
 - During generation: AI can read cached dependencies from `~/.specledger/cache/@alias/`
+
+### Task Tracking
+
+SpecLedger uses [Beads](https://github.com/amelie/beads) for task and issue tracking. When you create a new project, Beads is automatically configured with your project's short code.
+
+```bash
+# View all tasks
+bd ls
+
+# Show ready tasks (limit 5)
+bd ready --limit 5
+
+# Create a new task
+bd new "Implement user authentication"
+
+# Mark a task as done
+bd done <task-id>
+```
+
+The task tracker configuration is stored in `specledger/specledger.yaml`:
+
+```yaml
+task_tracker:
+  choice: beads  # Currently only beads is supported
+  enabled_at: "2026-02-05T10:30:00Z"
+```
 
 ### Checking Tool Status
 
