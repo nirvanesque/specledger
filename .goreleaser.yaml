@@ -7,8 +7,8 @@ before:
     - go generate ./...
 
 env:
-  GO111MODULE: auto
-  CGO_ENABLED: 0
+  - GO111MODULE=auto
+  - CGO_ENABLED=0
 
 checksum:
   name_template: 'checksums.txt'
@@ -18,10 +18,10 @@ changelog:
   use: github
   groups:
     - title: 'Features'
-      regex: '^feat[\s].*'
+      regexp: '^feat[\s].*'
       order: 100
     - title: 'Under the Hood'
-      regex: '^fix[\s].*|^perf[\s].*'
+      regexp: '^fix[\s].*|^perf[\s].*'
       order: 200
     - title: 'Other Changes'
       order: 300
@@ -38,7 +38,7 @@ builds:
       - arm64
       - arm
     goarm:
-      - 7
+      - '7'
     ldflags:
       - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
 
@@ -51,7 +51,7 @@ archives:
     files:
       - LICENSE
       - README.md
-    strip_parent: true
+    strip_parent_directory: true
 
 nfpms:
   - vendor: specledger
@@ -132,7 +132,7 @@ release:
 
     ### Source
     ```bash
-    git clone https://github.com/your-org/specledger.git
+    git clone https://github.com/specledger/specledger.git
     cd specledger
     make build
     ```
