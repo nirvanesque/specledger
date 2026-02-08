@@ -39,12 +39,12 @@ SpecLedger is an **all-in-one SDD playbook** that provides:
 ### Quick Install (Recommended)
 
 ```bash
-# Install via Homebrew
+# Install via one-line script
+curl -fsSL https://raw.githubusercontent.com/specledger/specledger/main/scripts/install.sh | bash
+
+# Or install via Homebrew
 brew tap specledger/homebrew-specledger
 brew install specledger
-
-# Or install via one-line script
-curl -fsSL https://raw.githubusercontent.com/specledger/specledger/main/scripts/install.sh | bash
 ```
 
 ### From Source
@@ -55,15 +55,10 @@ cd specledger
 make install
 ```
 
-### Package Managers
+### Go Install
 
 ```bash
-# Homebrew
-brew tap specledger/homebrew-specledger
-brew install specledger
-
-# npm / npx
-npx @specledger/cli@latest --help
+go install github.com/specledger/specledger/cmd/sl@latest
 ```
 
 ## Quick Start
