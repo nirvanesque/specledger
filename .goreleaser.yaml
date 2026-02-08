@@ -28,14 +28,14 @@ changelog:
       order: 300
 
 builds:
-  - main: ./cmd/main.go
+  - id: sl
+    main: ./cmd/main.go
     binary: sl
     env:
       - CGO_ENABLED=0
     goos:
       - linux
       - darwin
-      - windows
     goarch:
       - amd64
       - arm64
@@ -44,12 +44,26 @@ builds:
       - '7'
     ldflags:
       - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+  - id: sl-windows
+    main: ./cmd/main.go
+    binary: sl
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
 
 archives:
-  - format: tar.gz
+  - formats:
+      - tar.gz
     format_overrides:
       - goos: windows
-        format: zip
+        formats:
+          - zip
     name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
     files:
       - LICENSE
@@ -68,7 +82,7 @@ nfpms:
     dependencies:
       - glibc (>= 2.17)
 
-brews:
+homebrew_casks:
   - name: specledger
     homepage: 'https://github.com/specledger/specledger'
     description: 'Unified CLI for project bootstrap and specification dependency management'
@@ -79,16 +93,11 @@ release:
   github:
     owner: specledger
     name: specledger
-
   prerelease: auto
   draft: false
-
   mode: replace
   header: |
     ## 🚀 SpecLedger {{ .Tag }}
-
-    {{ .Changelog }}
-
   footer: |
     ## 📦 Installation
 
