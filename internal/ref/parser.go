@@ -158,12 +158,6 @@ func (r *ReferenceResolver) GetDependencies() map[string]string {
 	return r.dependencies
 }
 
-// resolveReferenceByAlias tries to resolve a reference using its alias
-func (r *ReferenceResolver) resolveReferenceByAlias(alias string) (string, error) {
-	// This is a placeholder - actual resolution depends on the lockfile
-	return "", fmt.Errorf("alias not found: %s", alias)
-}
-
 // extractMarkdownLinks extracts all markdown links from content
 func extractMarkdownLinks(content string) []linkInfo {
 	pattern := `\[([^\]]+)\]\(([^)]+)\)`
