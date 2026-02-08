@@ -101,7 +101,7 @@ func (r *ReferenceResolver) validateReference(ref Reference) *ValidationError {
 		return &ValidationError{
 			Reference: ref,
 			Field:     "url",
-			Message:   fmt.Sprintf("failed to resolve reference: %w", err),
+			Message:   fmt.Sprintf("failed to resolve reference: %s", err),
 		}
 	}
 
@@ -205,7 +205,7 @@ func extractImageLinks(content string) []linkInfo {
 // extractInlineReferences extracts custom inline references (e.g., spec.example#section)
 func extractInlineReferences(content string) []linkInfo {
 	// Pattern for spec-reference syntax: spec.alias#section or spec-url#section
-	pattern := `spec\.([^\s\)\]+\[#?([^\]]+)?\]?)`
+	pattern := `spec\.([^\s\)]+\[#?([^\]]+)?\]?)`
 	re := regexp.MustCompile(pattern)
 	matches := re.FindAllStringSubmatch(content, -1)
 

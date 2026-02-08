@@ -59,7 +59,7 @@ func ErrProjectExists(projectName string) *CLIError {
 		"Project directory already exists",
 		fmt.Sprintf("Directory '%s' already exists", projectName),
 		[]string{
-			fmt.Sprintf("Choose a different project name"),
+			"Choose a different project name",
 			fmt.Sprintf("Remove the existing directory: rm -rf ~/demos/%s", projectName),
 			fmt.Sprintf("Use an existing project: cd ~/demos/%s", projectName),
 		},

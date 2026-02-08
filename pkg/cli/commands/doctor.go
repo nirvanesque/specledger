@@ -197,7 +197,6 @@ func outputDoctorHuman(check prerequisites.PrerequisiteCheck) error {
 func showFrameworkInitCommands(check prerequisites.PrerequisiteCheck, meta *metadata.ProjectMetadata) {
 	// Framework initialization commands are no longer needed
 	// as we use playbooks instead of frameworks
-	return
 }
 
 // isFrameworkInitialized checks if a framework is already initialized in the project
