@@ -464,42 +464,31 @@ func runResolveDependencies(cmd *cobra.Command, args []string) error {
 func cloneOrUpdateRepository(dep metadata.Dependency, targetDir string) error {
 	// Check if directory already exists
 	if _, err := os.Stat(targetDir); os.IsNotExist(err) {
-		// Clone the repository
-		args := []string{"clone", dep.URL, targetDir}
-		if dep.Branch != "" && dep.Branch != "main" {
-			args = append(args, "--branch", dep.Branch)
+		// Clone the repository using go-git/v5
+		cloneOpts := deps.CloneOptions{
+			URL:       dep.URL,
+			Branch:    dep.Branch,
+			TargetDir: targetDir,
+			Shallow:   false, // Do full clone for easier updates
 		}
 
-		cmd := exec.Command("git", args...)
-		cmd.Stdout = nil
-		cmd.Stderr = nil
-		if err := cmd.Run(); err != nil {
+		_, _, err := deps.Clone(cloneOpts)
+		if err != nil {
 			return fmt.Errorf("git clone failed: %w", err)
 		}
 	} else {
-		// Repository exists, fetch and pull updates
-		// Fetch latest changes
-		cmd := exec.Command("git", "-C", targetDir, "fetch", "origin")
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("git fetch failed: %w", err)
-		}
-
-		// Checkout the specified branch
-		branch := dep.Branch
-		if branch == "" {
-			branch = "main"
-		}
-
-		cmd = exec.Command("git", "-C", targetDir, "checkout", branch)
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("git checkout failed: %w", err)
+		// Repository exists, open and update it
+		repo, err := deps.OpenRepository(targetDir)
+		if err != nil {
+			return fmt.Errorf("failed to open repository: %w", err)
 		}
 
 		// Pull latest changes
-		cmd = exec.Command("git", "-C", targetDir, "pull", "origin", branch)
-		cmd.Stdout = nil
-		cmd.Stderr = nil
-		_ = cmd.Run() // Pull might fail if no tracking branch, ignore for read-only access
+		_, err = deps.Pull(repo, dep.Branch)
+		if err != nil {
+			// Pull might fail if no tracking branch, that's okay for read-only access
+			return fmt.Errorf("git pull failed: %w", err)
+		}
 	}
 
 	return nil
@@ -573,30 +562,21 @@ func runUpdateDependencies(cmd *cobra.Command, args []string) error {
 		fmt.Printf("   Current: %s\n", ui.Gray(dep.ResolvedCommit[:8]))
 		fmt.Printf("   Checking: %s...\n", ui.Yellow("fetching latest"))
 
-		// Fetch remote changes
-		gitCmd := exec.Command("git", "-C", cacheDir, "fetch", "origin")
-		if err := gitCmd.Run(); err != nil {
-			ui.PrintWarning(fmt.Sprintf("Failed to fetch updates: %v", err))
+		// Open the repository
+		repo, err := deps.OpenRepository(cacheDir)
+		if err != nil {
+			ui.PrintWarning(fmt.Sprintf("Failed to open repository: %v", err))
 			fmt.Println()
 			continue
 		}
 
-		// Get the remote branch name
-		remoteBranch := "origin/" + dep.Branch
-		if dep.Branch == "" {
-			remoteBranch = "origin/main"
-		}
-
-		// Get the latest commit SHA on the remote branch
-		gitCmd = exec.Command("git", "-C", cacheDir, "rev-parse", remoteBranch)
-		output, err := gitCmd.CombinedOutput()
+		// Get the latest commit from remote
+		latestCommit, err := deps.ResolveRemoteCommit(repo, dep.Branch)
 		if err != nil {
 			ui.PrintWarning(fmt.Sprintf("Failed to get remote commit: %v", err))
 			fmt.Println()
 			continue
 		}
-
-		latestCommit := strings.TrimSpace(string(output))
 
 		// Compare with current resolved commit
 		if latestCommit == dep.ResolvedCommit {
@@ -610,24 +590,12 @@ func runUpdateDependencies(cmd *cobra.Command, args []string) error {
 		fmt.Printf("   Latest:  %s\n", ui.Green(latestCommit[:8]))
 
 		// Show commit log between current and latest
-		gitCmd = exec.Command("git", "-C", cacheDir, "log", "--oneline", dep.ResolvedCommit+".."+latestCommit)
-		output, _ = gitCmd.CombinedOutput()
-		commits := strings.TrimSpace(string(output))
-		if commits != "" {
+		commits, err := deps.Log(repo, dep.ResolvedCommit, latestCommit, 5)
+		if err == nil && commits != "" {
 			lines := strings.Split(commits, "\n")
-			// Show up to 5 commits
-			if len(lines) > 5 {
-				lines = lines[:5]
-				fmt.Printf("   Changes:\n")
-				for _, line := range lines {
-					fmt.Printf("     %s\n", line)
-				}
-				fmt.Printf("     ... and %d more\n", len(strings.Split(commits, "\n"))-5)
-			} else {
-				fmt.Printf("   Changes:\n")
-				for _, line := range lines {
-					fmt.Printf("     %s\n", line)
-				}
+			fmt.Printf("   Changes:\n")
+			for _, line := range lines {
+				fmt.Printf("     %s\n", line)
 			}
 		}
 
@@ -636,8 +604,7 @@ func runUpdateDependencies(cmd *cobra.Command, args []string) error {
 		fmt.Printf("   Status: %s\n", ui.Yellow("updating"))
 
 		// Checkout the latest commit
-		gitCmd = exec.Command("git", "-C", cacheDir, "checkout", latestCommit)
-		if err := gitCmd.Run(); err != nil {
+		if err := deps.Checkout(repo, latestCommit); err != nil {
 			ui.PrintWarning(fmt.Sprintf("Failed to checkout latest commit: %v", err))
 			fmt.Println()
 			continue

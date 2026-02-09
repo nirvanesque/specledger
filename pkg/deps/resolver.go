@@ -12,7 +12,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 
 	"github.com/specledger/specledger/pkg/cli/metadata"
@@ -63,21 +62,17 @@ func DetectArtifactPathFromSpecLedgerRepo(repoPath string) (string, error) {
 //   - artifact_path value from specledger.yaml
 //   - error if clone fails, not a SpecLedger repo, or artifact_path missing
 func DetectArtifactPathFromRemote(repoURL, branch, cacheDir string) (string, error) {
-	// Create cache directory if it doesn't exist
-	if err := os.MkdirAll(cacheDir, 0755); err != nil {
-		return "", fmt.Errorf("failed to create cache directory: %w", err)
+	// Clone the repository using go-git
+	cloneOpts := CloneOptions{
+		URL:       repoURL,
+		Branch:    branch,
+		TargetDir: cacheDir,
+		Shallow:   true,
 	}
 
-	// Shallow clone for speed
-	args := []string{"clone", "--depth", "1", "--single-branch"}
-	if branch != "" && branch != "main" {
-		args = append(args, "--branch", branch)
-	}
-	args = append(args, repoURL, cacheDir)
-
-	cmd := exec.Command("git", args...)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return "", fmt.Errorf("failed to clone repository: %w\nOutput: %s", err, string(output))
+	_, _, err := Clone(cloneOpts)
+	if err != nil {
+		return "", fmt.Errorf("failed to clone repository: %w", err)
 	}
 
 	// Detect artifact_path from cloned repo
