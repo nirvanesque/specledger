@@ -29,14 +29,16 @@ Examples:
 
 // VarAddCmd represents the add command
 var VarAddCmd = &cobra.Command{
-	Use:   "add <repo-url> [branch] --alias <name>",
+	Use:   "add <repo-url> [branch] --alias <name> [--artifact-path <path>]",
 	Short: "Add a dependency",
 	Long:  `Add an external specification dependency to your project. The dependency will be tracked in specledger.yaml and cached locally for offline use.
 
-The --alias flag is required and will be used as the reference path when accessing artifacts from this dependency.`,
+The --alias flag is required and will be used as the reference path when accessing artifacts from this dependency.
+
+For SpecLedger repositories, the artifact_path will be auto-detected from the dependency's specledger.yaml. For non-SpecLedger repositories, use --artifact-path to manually specify where artifacts are located.`,
 	Example: `  sl deps add git@github.com:org/api-spec --alias api
   sl deps add git@github.com:org/api-spec develop --alias api
-  sl deps add https://github.com/org/api-spec --alias api`,
+  sl deps add https://github.com/org/api-docs --alias docs --artifact-path docs/openapi/`,
 	Args: cobra.MinimumNArgs(1),
 	RunE: runAddDependency,
 }
@@ -84,6 +86,7 @@ func init() {
 
 	VarAddCmd.Flags().StringP("alias", "a", "", "Required alias for the dependency (used as reference path)")
 	VarAddCmd.MarkFlagRequired("alias")
+	VarAddCmd.Flags().String("artifact-path", "", "Path to artifacts within dependency repository (auto-detected for SpecLedger repos)")
 	VarResolveCmd.Flags().BoolP("no-cache", "n", false, "Ignore cached specifications")
 }
 
@@ -102,6 +105,7 @@ func runAddDependency(cmd *cobra.Command, args []string) error {
 
 	// Extract flags
 	alias, _ := cmd.Flags().GetString("alias")
+	artifactPath, _ := cmd.Flags().GetString("artifact-path")
 
 	// Parse arguments
 	repoURL := args[0]
@@ -114,6 +118,13 @@ func runAddDependency(cmd *cobra.Command, args []string) error {
 	// Validate URL
 	if !isValidGitURL(repoURL) {
 		return fmt.Errorf("invalid repository URL: %s", repoURL)
+	}
+
+	// Validate artifact_path if provided
+	if artifactPath != "" {
+		if err := metadata.ValidateArtifactPath(artifactPath); err != nil {
+			return fmt.Errorf("invalid artifact-path: %w", err)
+		}
 	}
 
 	// Detect framework type
@@ -144,10 +155,11 @@ func runAddDependency(cmd *cobra.Command, args []string) error {
 
 	// Create dependency
 	dep := metadata.Dependency{
-		URL:       repoURL,
-		Branch:    branch,
-		Alias:     alias,
-		Framework: frameworkType,
+		URL:          repoURL,
+		Branch:       branch,
+		Alias:        alias,
+		ArtifactPath: artifactPath,
+		Framework:    frameworkType,
 	}
 
 	// Generate import path for AI context
