@@ -18,7 +18,7 @@ func TestTemplatesFSPopulated(t *testing.T) {
 
 	// Check for expected top-level entries
 	expectedEntries := map[string]bool{
-		"templates":    true, // directory
+		"templates":     true,  // directory
 		"manifest.yaml": false, // this is a file
 	}
 

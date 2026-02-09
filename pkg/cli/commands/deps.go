@@ -98,7 +98,7 @@ Example:  sl deps link`,
 var VarUnlinkCmd = &cobra.Command{
 	Use:   "unlink [alias]",
 	Short: "Remove symlinks for dependencies",
-	Long:  `Remove symlinks for dependencies from the project's artifacts directory.
+	Long: `Remove symlinks for dependencies from the project's artifacts directory.
 
 If no alias is specified, removes all dependency symlinks. If an alias is specified, only removes that dependency's symlink.
 

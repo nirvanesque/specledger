@@ -16,10 +16,11 @@ import (
 // <project.artifact_path> + "deps/" + <dependency.alias> + "/" + <artifact-name>
 //
 // Example:
-//   project.artifact_path: specledger/
-//   dependency.alias: platform
-//   artifact_name: api.md
-//   Result: specledger/deps/platform/api.md
+//
+//	project.artifact_path: specledger/
+//	dependency.alias: platform
+//	artifact_name: api.md
+//	Result: specledger/deps/platform/api.md
 //
 // Parameters:
 //   - projectArtifactPath: The artifact_path from the project's specledger.yaml
