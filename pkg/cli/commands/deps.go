@@ -114,7 +114,10 @@ func init() {
 	VarAddCmd.Flags().StringP("alias", "a", "", "Required alias for the dependency (used as reference path)")
 	_ = VarAddCmd.MarkFlagRequired("alias")
 	VarAddCmd.Flags().String("artifact-path", "", "Path to artifacts within dependency repository (auto-detected for SpecLedger repos)")
+	VarAddCmd.Flags().Bool("link", false, "Create symlinks after adding dependency")
+
 	VarResolveCmd.Flags().BoolP("no-cache", "n", false, "Ignore cached specifications")
+	VarResolveCmd.Flags().Bool("link", false, "Create symlinks after resolving dependencies")
 }
 
 func runAddDependency(cmd *cobra.Command, args []string) error {
@@ -279,10 +282,13 @@ func runAddDependency(cmd *cobra.Command, args []string) error {
 	fmt.Printf("  Import Path: %s\n", ui.Cyan(importPath))
 	fmt.Println()
 
-	// Auto-link the dependency
-	if err := linkDependency(projectDir, meta, dep); err != nil {
-		ui.PrintWarning(fmt.Sprintf("Failed to create symlink: %v", err))
-		ui.PrintWarning("Dependency was added but not linked. Run 'sl deps link' to manually link.")
+	// Auto-link the dependency if --link flag is set
+	linkFlag, _ := cmd.Flags().GetBool("link")
+	if linkFlag {
+		if err := linkDependency(projectDir, meta, dep); err != nil {
+			ui.PrintWarning(fmt.Sprintf("Failed to create symlink: %v", err))
+			ui.PrintWarning("Dependency was added but not linked. Run 'sl deps link' to manually link.")
+		}
 	}
 
 	return nil
@@ -489,8 +495,9 @@ func runResolveDependencies(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Println()
 
-	// Auto-link all resolved dependencies
-	if resolvedCount > 0 {
+	// Link all resolved dependencies if --link flag is set
+	linkFlag, _ := cmd.Flags().GetBool("link")
+	if linkFlag && resolvedCount > 0 {
 		ui.PrintSection("Linking Dependencies")
 		linkedCount := 0
 		for _, dep := range meta.Dependencies {

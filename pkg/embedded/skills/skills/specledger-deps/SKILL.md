@@ -50,6 +50,16 @@ Dependencies are **automatically downloaded** when you add them:
 - Current commit SHA is resolved and stored
 - No separate `sl deps resolve` command needed (resolve is for manual refresh only)
 
+### Linking for Claude Code
+
+To make dependency artifacts accessible for Claude Code, use the `--link` flag:
+```bash
+sl deps add git@github.com:org/platform-specs --alias platform --link
+sl deps resolve --link
+```
+
+This creates symlinks at `specledger/deps/<alias>/` pointing to the cached artifacts. You can then reference artifacts using the `alias:artifact` format (e.g., `platform:api.md`).
+
 ## When to Use
 
 Use `sl deps` when you need to:
