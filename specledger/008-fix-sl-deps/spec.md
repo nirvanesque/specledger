@@ -7,19 +7,19 @@
 
 ## User Scenarios & Testing *(mandatory)*
 
-### User Story 1 - Resolve Downloads Dependencies to Cache (Priority: P1)
+### User Story 1 - Add Dependencies Automatically Downloads to Cache (Priority: P1)
 
-As a developer using SpecLedger with external specification dependencies, I want the `sl deps resolve` command to download dependency repositories to `~/.specledger/cache` so that I can access them offline and for AI context.
+As a developer using SpecLedger with external specification dependencies, I want the `sl deps add` command to automatically download and cache the dependency repository so that it's immediately available for use.
 
-**Why this priority**: This is the core functionality of the dependency system - without downloading dependencies, the entire feature doesn't work.
+**Why this priority**: This is the core functionality of the dependency system - dependencies should be available immediately after adding them.
 
-**Independent Test**: Can be fully tested by adding a dependency with `sl deps add`, running `sl deps resolve`, and verifying that the repository is cloned to `~/.specledger/cache/<dir-name>/`.
+**Independent Test**: Can be fully tested by adding a dependency with `sl deps add` and verifying that the repository is automatically cloned to `~/.specledger/cache/<dir-name>/`.
 
 **Acceptance Scenarios**:
 
-1. **Given** a project with dependencies declared in `specledger.yaml`, **When** I run `sl deps resolve`, **Then** each dependency should be cloned to `~/.specledger/cache/<dir-name>/`
-2. **Given** a dependency that has already been resolved, **When** I run `sl deps resolve` again, **Then** it should update the repository to the latest commit on the configured branch
-3. **Given** a dependency with a custom branch like `develop`, **When** I run `sl deps resolve`, **Then** the repository should be checked out to that branch
+1. **Given** I run `sl deps add <url> --alias <name>`, **When** the command completes, **Then** the dependency should be automatically cloned to `~/.specledger/cache/<dir-name>/`
+2. **Given** a dependency that has already been added, **When** I run `sl deps add` again for the same URL, **Then** the system should error indicating the dependency already exists
+3. **Given** a dependency with a custom branch like `develop`, **When** I add it, **Then** the repository should be checked out to that branch
 
 ---
 
@@ -65,25 +65,27 @@ As a developer working with dependencies, I want to reference artifacts from dep
 
 **Acceptance Scenarios**:
 
-1. **Given** my project has `artifact_path: specledger/`, **When** I reference `dependency-name:artifact.md`, **Then** the system should resolve to `specledger/dependency-name/artifact.md`
-2. **Given** my project has `artifact_path: docs/specs/`, **When** I reference a dependency with artifact path `specs/api.md`, **Then** the system should resolve to `docs/specs/dependency-name/specs/api.md`
-3. **Given** a dependency with no artifact path specified, **When** I reference it, **Then** the system should use the default artifact path
+1. **Given** my project has `artifact_path: specledger/`, **When** I reference `dependency-alias:artifact.md`, **Then** the system should resolve to `specledger/dependency-alias/artifact.md`
+2. **Given** my project has `artifact_path: docs/specs/`, **When** I reference a dependency with alias `api-docs` and the dependency has `artifact_path: openapi/`, **Then** the system should resolve reference `api-docs:api.yaml` to `docs/specs/api-docs/openapi/api.yaml`
+3. **Given** a dependency with no artifact path specified, **When** I reference it, **Then** the system should use the dependency repository root as the artifact path
 
 ---
 
-### User Story 5 - Create Claude Code Command Files for All Deps Operations (Priority: P1)
+### User Story 5 - Create Claude Code Command Files for Core Deps Operations (Priority: P1)
 
-As a developer using Claude Code, I want `.claude/commands/` files for all deps operations so that the AI agent can execute deps commands correctly.
+As a developer using Claude Code, I want `.claude/commands/` files for the core deps operations (add and remove) so that the AI agent can execute them correctly.
 
-**Why this priority**: Critical for AI integration - without command files, the AI agent doesn't know how to execute deps operations.
+**Why this priority**: Critical for AI integration - without command files, the AI agent doesn't know how to execute the primary deps operations.
 
-**Independent Test**: Can be tested by verifying that each deps subcommand has a corresponding `.claude/commands/specledger.<operation>.md` file.
+**Independent Test**: Can be tested by verifying that the core deps operations have corresponding `.claude/commands/specledger.<operation>.md` files.
 
 **Acceptance Scenarios**:
 
-1. **Given** the SpecLedger CLI with deps commands, **When** I inspect `.claude/commands/`, **Then** I should find files for: `specledger.add-deps`, `specledger.remove-deps`, `specledger.list-deps`, `specledger.resolve-deps`, `specledger.update-deps`
-2. **Given** a command file like `specledger.resolve-deps.md`, **When** an AI agent reads it, **Then** it should contain clear instructions on how to execute the resolve operation
+1. **Given** the SpecLedger CLI with deps commands, **When** I inspect `.claude/commands/`, **Then** I should find files for: `specledger.add-deps`, `specledger.remove-deps`
+2. **Given** a command file like `specledger.add-deps.md`, **When** an AI agent reads it, **Then** it should contain clear instructions on how to execute the add operation
 3. **Given** an AI agent following a command file, **When** it executes the command, **Then** the operation should complete successfully
+
+**Note**: Other deps operations (list, update, resolve) are documented in the `specledger-deps` skill for reference but do not require dedicated command files. The `add` command automatically downloads dependencies.
 
 ---
 
@@ -119,10 +121,10 @@ As a developer using Claude Code, I want the `.claude/skills/specledger-deps/` s
 
 **Dependency Resolution (Core)**
 
-- **FR-001**: The `sl deps resolve` command MUST download/clone dependency repositories to `~/.specledger/cache/<dir-name>/`
-- **FR-002**: The `sl deps resolve` command MUST handle partial downloads and resume interrupted downloads
-- **FR-003**: When resolving, the system MUST update repositories to the latest commit on their configured branches
-- **FR-004**: The system MUST use the alias (if provided) or generate a directory name for caching
+- **FR-001**: The `sl deps add` command MUST automatically download/clone dependency repositories to `~/.specledger/cache/<dir-name>/`
+- **FR-002**: The `sl deps add` command MUST handle partial downloads and resume interrupted downloads
+- **FR-003**: When adding, the system MUST checkout the specified branch and resolve the current commit SHA
+- **FR-004**: The system MUST use the alias for the cache directory name
 
 **Artifact Path Configuration (Current Project)**
 
@@ -135,21 +137,21 @@ As a developer using Claude Code, I want the `.claude/skills/specledger-deps/` s
 
 - **FR-009**: When adding a SpecLedger repository dependency, the system MUST read the dependency's `specledger.yaml` to automatically discover its `artifact_path`
 - **FR-010**: When adding a non-SpecLedger repository, the system MUST allow manual specification of the artifact path via `--artifact-path` flag
-- **FR-011**: The `sl deps add` command MUST accept an optional third argument for the reference path within the current project's `artifact_path` (default: same as dependency name)
+- **FR-011**: The `sl deps add` command MUST require an `--alias` flag for identifying the dependency
 - **FR-012**: The `sl deps list` command MUST display both the dependency URL and its artifact path (or discovered path)
 
 **Reference Resolution**
 
 - **FR-013**: When referencing artifacts from dependencies, the system MUST resolve paths by combining the current project's `artifact_path` with the dependency's artifact path
-- **FR-014**: The system MUST support nested references (e.g., `artifact_path: specledger/` with dependency artifact path `specs/` resolves to `specledger/<dep-name>/specs/`)
+- **FR-014**: The system MUST support nested references (e.g., `artifact_path: specledger/` with dependency alias `platform` and dependency artifact path `specs/` resolves to `specledger/platform/specs/`)
 - **FR-015**: The system MUST validate that resolved artifact paths point to existing files
 - **FR-016**: The system MUST provide clear error messages when artifact paths cannot be resolved
 
 **Claude Code Integration**
 
-- **FR-017**: The `.claude/commands/` directory MUST contain command files for all deps operations: `specledger.add-deps`, `specledger.remove-deps`, `specledger.list-deps`, `specledger.resolve-deps`, `specledger.update-deps`
+- **FR-017**: The `.claude/commands/` directory MUST contain command files for the core deps operations: `specledger.add-deps`, `specledger.remove-deps`
 - **FR-018**: Each command file MUST provide clear instructions that the AI agent can follow to execute the deps operation
-- **FR-019**: The `.claude/skills/specledger-deps/` skill MUST contain comprehensive documentation on dependency management workflow, including artifact_path discovery and reference resolution
+- **FR-019**: The `.claude/skills/specledger-deps/` skill MUST contain comprehensive documentation on dependency management workflow, including artifact_path discovery, reference resolution, and all deps commands (add, remove, list, update, resolve)
 - **FR-020**: Command files and skills MUST be kept in sync with CLI behavior changes
 
 ### Key Entities
@@ -158,8 +160,7 @@ As a developer using Claude Code, I want the `.claude/skills/specledger-deps/` s
   - `url`: Git repository URL
   - `branch`: Git branch (default: main)
   - `artifact_path`: The path within the dependency repo where artifacts are stored (auto-discovered for SpecLedger repos, manual for others)
-  - `path`: Reference path within the current project's `artifact_path` to this dependency (default: same as dependency name)
-  - `alias`: Optional short name for the dependency
+  - `alias`: Short name for the dependency (used as reference path within project's artifact_path)
   - `importPath`: Generated path for AI context
   - `resolvedCommit`: The Git commit SHA that was resolved
 
@@ -177,12 +178,12 @@ As a developer using Claude Code, I want the `.claude/skills/specledger-deps/` s
 
 ### Measurable Outcomes
 
-- **SC-001**: Developers can run `sl deps resolve` and dependencies are downloaded to `~/.specledger/cache/`
+- **SC-001**: Developers can run `sl deps add` and dependencies are automatically downloaded to `~/.specledger/cache/`
 - **SC-002**: The `specledger.yaml` file contains an `artifact_path` field that correctly points to the project's artifacts directory
 - **SC-003**: When adding SpecLedger repository dependencies, the system automatically discovers their `artifact_path`
 - **SC-004**: When adding non-SpecLedger repository dependencies, users can specify `--artifact-path` flag
 - **SC-005**: Artifact references are resolved correctly by combining project's `artifact_path` with dependency's artifact path
-- **SC-006**: All 5 deps operations have corresponding `.claude/commands/specledger.<operation>.md` files
+- **SC-006**: Core deps operations have corresponding `.claude/commands/specledger.<operation>.md` files (add, remove)
 - **SC-007**: The `.claude/skills/specledger-deps/` skill contains comprehensive documentation on the deps workflow
 - **SC-008**: Dependencies are successfully downloaded and cached in 95% of cases (excluding network errors)
 
@@ -202,9 +203,9 @@ As a developer using Claude Code, I want the `.claude/skills/specledger-deps/` s
 
 ### Current Issues Identified
 
-1. The `.claude/commands/` directory only contains `specledger.add-deps.md` and `specledger.remove-deps.md`, missing commands for: `list-deps`, `resolve-deps`, `update-deps`
-2. The `specledger.yaml` structure may not have an `artifact_path` field for the current project
-3. Dependencies in `specledger.yaml` may not be storing artifact_path information for non-SpecLedger repos
-4. The system may not be reading dependency `specledger.yaml` files to discover artifact paths
-5. The `sl deps resolve` command may not be correctly downloading to `~/.specledger/cache/`
-6. The `.claude/skills/specledger-deps/` skill may not contain comprehensive documentation
+1. The `.claude/commands/` directory contains `specledger.add-deps.md` and `specledger.remove-deps.md` (list and update are documented in the skill, not separate command files)
+2. The `specledger.yaml` structure does not have an `artifact_path` field for the current project
+3. Dependencies in `specledger.yaml` do not store artifact_path information for non-SpecLedger repos
+4. The system does not read dependency `specledger.yaml` files to discover artifact paths
+5. The `sl deps add` command does not automatically download/cache dependencies
+6. The `.claude/skills/specledger-deps/` skill does not contain comprehensive documentation

@@ -54,13 +54,12 @@ func (m *ProjectMetadata) GetArtifactPath() string {
 
 **Location**: `pkg/cli/metadata/schema.go`
 
-**Changes**: Add `ArtifactPath` field
+**Changes**: Add `ArtifactPath` field, remove `Path` field (use `alias` instead)
 
 ```go
 type Dependency struct {
     URL            string          `yaml:"url"`
     Branch         string          `yaml:"branch,omitempty"`
-    Path           string          `yaml:"path,omitempty"`
     Alias          string          `yaml:"alias,omitempty"`
     ArtifactPath   string          `yaml:"artifact_path,omitempty"` // NEW
     ResolvedCommit string          `yaml:"resolved_commit,omitempty"`
@@ -74,8 +73,7 @@ type Dependency struct {
 |-------|------|----------|---------|-------------|
 | url | string | Yes | - | Git repository URL |
 | branch | string | No | `main` | Git branch name |
-| path | string | No | `<alias>` | Reference path within project's artifact_path |
-| alias | string | No | `<generated>` | Short name for the dependency |
+| alias | string | Yes | - | Short name for the dependency (used as reference path) |
 | **artifact_path** | **string** | **No** | **auto-discovered** | **Path to artifacts within dependency repo** |
 | resolved_commit | string | No | - | Git commit SHA when resolved |
 | framework | FrameworkChoice | No | `none` | Framework type (speckit, openspec, both, none) |
@@ -85,6 +83,11 @@ type Dependency struct {
 - **SpecLedger repos**: Auto-discovered by reading dependency's `specledger.yaml`
 - **Non-SpecLedger repos**: Must be specified via `--artifact-path` flag
 - If not specified and not auto-discoverable: defaults to empty string (root of repo)
+
+**Alias Behavior**:
+- Required for identifying the dependency
+- Used as the reference path within the project's artifact_path
+- Must be unique across all dependencies in the project
 
 ### 3. Artifact Reference (New Concept)
 
@@ -96,7 +99,7 @@ type Dependency struct {
 - `api-specs:openapi.yaml` - References openapi.yaml from api-specs dependency
 - `shared-specs:common/types.md` - References common/types.md from shared-specs
 
-**Resolution**: `project.artifact_path + dependency.path + "/" + artifact-name`
+**Resolution**: `project.artifact_path + dependency.alias + "/" + artifact-name`
 
 **Example Resolution**:
 ```yaml
@@ -105,11 +108,13 @@ artifact_path: specledger/
 dependencies:
   - url: git@github.com:org/api-specs
     artifact_path: specs/
-    path: api
     alias: api-specs
 
 # Reference "api-specs:openapi.yaml"
-# Resolves to: specledger/api/openapi.yaml
+# Resolves to: specledger/api-specs/openapi.yaml
+#
+# The file is found in the dependency's cache at:
+# ~/.specledger/cache/api-specs/specs/openapi.yaml
 ```
 
 ---
@@ -180,7 +185,6 @@ dependencies:
   - url: git@github.com:org/platform-specs
     branch: main
     artifact_path: specs/
-    path: platform
     alias: platform
     resolved_commit: abc123def456789abc123def456789abc123def4
     framework: both
@@ -190,7 +194,6 @@ dependencies:
   - url: https://github.com/external/api-docs
     branch: v2.0
     artifact_path: docs/openapi/
-    path: api-docs
     alias: api-docs
     resolved_commit: def456abc123789def456abc123789def456abc12
     framework: none
@@ -217,7 +220,6 @@ playbook:
 dependencies:
   - url: git@github.com:org/specs
     branch: main
-    path: specs
     alias: specs
 ```
 
@@ -254,14 +256,9 @@ func ResolveArtifactReference(projectMeta *ProjectMetadata, reference string) (s
         return "", fmt.Errorf("dependency not found: %s", alias)
     }
 
-    // Build path: project.artifact_path + dep.path + "/" + artifactName
+    // Build path: project.artifact_path + dep.alias + "/" + artifactName
     artifactBase := projectMeta.GetArtifactPath()
-    depPath := dep.Path
-    if depPath == "" {
-        depPath = dep.Alias
-    }
-
-    fullPath := filepath.Join(artifactBase, depPath, artifactName)
+    fullPath := filepath.Join(artifactBase, dep.Alias, artifactName)
 
     // Validate path exists
     if _, err := os.Stat(fullPath); os.IsNotExist(err) {
@@ -276,14 +273,17 @@ func ResolveArtifactReference(projectMeta *ProjectMetadata, reference string) (s
 
 **Input**:
 - Project artifact_path: `specledger/`
-- Dependency: `{alias: "api", path: "api-specs", artifact_path: "specs/"}`
-- Reference: `api:openapi.yaml`
+- Dependency: `{alias: "api-specs", artifact_path: "specs/"}`
+- Reference: `api-specs:openapi.yaml`
 
 **Steps**:
-1. Parse reference: alias="api", artifact="openapi.yaml"
-2. Find dependency with alias="api"
+1. Parse reference: alias="api-specs", artifact="openapi.yaml"
+2. Find dependency with alias="api-specs"
 3. Build path: `specledger/` + `api-specs/` + `openapi.yaml`
 4. Result: `specledger/api-specs/openapi.yaml`
+
+**Note**: The file is physically located in the cache at:
+`~/.specledger/cache/api-specs/specs/openapi.yaml`
 
 ---
 

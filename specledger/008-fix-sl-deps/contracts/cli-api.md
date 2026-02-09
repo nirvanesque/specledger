@@ -14,7 +14,7 @@ This document defines the CLI API contracts for the SpecLedger dependencies comm
 
 ### Signature
 ```bash
-sl deps add <repo-url> [<branch>] [<path>] [flags]
+sl deps add <repo-url> [<branch>] [flags]
 ```
 
 ### Arguments
@@ -22,12 +22,11 @@ sl deps add <repo-url> [<branch>] [<path>] [flags]
 |----------|------|------|----------|---------|-------------|
 | 0 | repo-url | string | Yes | - | Git repository URL (SSH or HTTPS) |
 | 1 | branch | string | No | `main` | Git branch name |
-| 2 | path | string | No | `<alias>` | Reference path within project's artifact_path |
 
 ### Flags
 | Flag | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `-a, --alias <name>` | string | No | `<generated>` | Short name for the dependency |
+| `-a, --alias <name>` | string | Yes | - | Short name for the dependency (used as reference path) |
 | `--artifact-path <path>` | string | Conditional | - | Artifact path in dependency repo (required for non-SpecLedger repos) |
 
 ### Input
@@ -43,7 +42,6 @@ Dependency added
   Repository:  git@github.com:org/specs
   Alias:       specs
   Branch:      main
-  Path:        spec.md
   Framework:   Spec Kit
   Import Path: @specs/spec
 
@@ -58,6 +56,7 @@ Next: sl deps resolve
 | 2 | Dependency already exists |
 | 3 | Alias already exists |
 | 4 | Failed to save metadata |
+| 5 | Alias not provided |
 
 ### Error Conditions
 | Condition | Error Message | Resolution |
@@ -65,18 +64,22 @@ Next: sl deps resolve
 | Invalid repo URL | `invalid repository URL: <url>` | Use valid SSH or HTTPS Git URL |
 | Dependency exists | `dependency already exists: <url>` | Remove first or use different URL |
 | Alias exists | `alias already exists: <alias>` | Use different alias |
+| Alias not provided | `alias is required (use --alias <name>)` | Provide --alias flag |
 | Not in project | `failed to find project root: not in a SpecLedger project` | Navigate to project directory |
 
 ### Examples
 ```bash
 # Add SpecLedger repo (auto-detect artifact_path)
-sl deps add git@github.com:org/platform-specs main specs/ --alias platform
+sl deps add git@github.com:org/platform-specs --alias platform
+
+# Add with branch
+sl deps add git@github.com:org/platform-specs develop --alias platform
 
 # Add non-SpecLedger repo (manual artifact_path)
-sl deps add https://github.com/external/api.git --artifact-path docs/openapi/
+sl deps add https://github.com/external/api.git --alias api-docs --artifact-path docs/openapi/
 
 # Add with all parameters
-sl deps add git@github.com:user/repo.git develop docs/spec.md --alias user-spec
+sl deps add git@github.com:user/repo.git develop --alias user-spec --artifact-path docs/
 ```
 
 ---
@@ -454,8 +457,7 @@ dependencies: []Dependency
 ```yaml
 url: string
 branch: string (optional)
-path: string (optional)
-alias: string (optional)
+alias: string (required)
 artifact_path: string (optional)   # NEW
 resolved_commit: string (optional)
 framework: "speckit" | "openspec" | "both" | "none" (optional)

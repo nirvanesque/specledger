@@ -39,12 +39,12 @@
 - FR-017 to FR-020: Claude Code integration (commands, skills, documentation)
 
 **Success Criteria**: 8 total
-- SC-001: Dependency download to cache
+- SC-001: Auto-download on `sl deps add`
 - SC-002: artifact_path in specledger.yaml
 - SC-003: Auto-discovery for SpecLedger repos
 - SC-004: Manual --artifact-path flag for non-SpecLedger repos
 - SC-005: Artifact path resolution works
-- SC-006: Claude command files for all operations
+- SC-006: Claude command files for primary operations (add, remove, list, update)
 - SC-007: Comprehensive specledger-deps skill
 - SC-008: 95% download success rate
 
@@ -55,13 +55,15 @@ All validation items passed. The specification is ready for the next phase:
 - Run `/specledger.tasks` to generate the task breakdown
 
 **Key Focus Areas**:
-1. Create `.claude/commands/` files for: `list-deps`, `resolve-deps`, `update-deps` (add/remove already exist)
+1. Keep only `.claude/commands/` files for: `add-deps`, `remove-deps` (already exist)
 2. Add `artifact_path` field to `specledger.yaml` structure
 3. Implement artifact_path discovery (read dependency's specledger.yaml)
 4. Add `--artifact-path` flag to `sl deps add` for non-SpecLedger repos
-5. Update `.claude/skills/specledger-deps/` with comprehensive documentation
+5. Make `sl deps add` automatically download/cache dependencies
+6. Update `.claude/skills/specledger-deps/` with comprehensive documentation (includes list, resolve, update workflows)
 
 **Architecture Clarification**:
 - **Current Project**: Has `artifact_path` in its `specledger.yaml` (e.g., `specledger/`)
-- **Dependency**: Has `artifact_path` (auto-discovered) and `path` (reference within current project's artifact_path)
-- **Reference Resolution**: `artifact_path` + dependency's `path` = full path to artifact in cache or local project
+- **Dependency**: Has `artifact_path` (auto-discovered) and `alias` (used as reference path within current project's artifact_path)
+- **Reference Resolution**: `project.artifact_path + dependency.alias + artifact-name` = full path to artifact
+- **Auto-download**: `sl deps add` automatically resolves (downloads) dependencies like `go mod`

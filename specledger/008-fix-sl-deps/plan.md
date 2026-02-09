@@ -196,10 +196,12 @@ No specific beads identified yet. The feature spec references generic epic SL-26
 
 **Design Decisions**:
 1. **Reference Format**: `<alias>:<artifact-name>` for cross-repo references
-2. **Resolution Formula**: `project.artifact_path + dependency.path + "/" + artifact_name`
+2. **Resolution Formula**: `project.artifact_path + dependency.alias + "/" + artifact_name` (removed separate `path` field)
 3. **Auto-Discovery**: Read dependency's specledger.yaml to find artifact_path for SpecLedger repos
 4. **Manual Flag**: `--artifact-path` flag for non-SpecLedger repos
-5. **Backward Compatibility**: `omitempty` YAML tags, default values for missing fields
+5. **Auto-Download**: `sl deps add` automatically downloads dependencies (like `go mod`)
+6. **Backward Compatibility**: `omitempty` YAML tags, default values for missing fields
+7. **Simplified Commands**: Only add/remove need dedicated command files; list/update/resolve documented in skill
 
 ---
 
@@ -210,14 +212,14 @@ No specific beads identified yet. The feature spec references generic epic SL-26
 | Task | File | Description |
 |------|------|-------------|
 | Add ArtifactPath | `pkg/cli/metadata/schema.go` | Add field to ProjectMetadata and Dependency |
+| Remove Path field | `pkg/cli/metadata/schema.go` | Remove `path` field from Dependency (use alias) |
 | Update sl new | `pkg/cli/commands/new.go` | Set default artifact_path |
 | Update sl init | `pkg/cli/commands/init.go` | Detect and configure artifact_path |
 | Add --artifact-path flag | `pkg/cli/commands/deps.go` | New flag for add command |
+| Make --alias required | `pkg/cli/commands/deps.go` | Alias is now required, no separate path field |
+| Implement auto-download | `pkg/cli/commands/deps.go` | `sl deps add` automatically downloads dependencies |
 | Implement discovery | `pkg/deps/resolver.go` | Auto-detect artifact_path from SpecLedger repos |
-| Complete resolve | `pkg/cli/commands/deps.go` | Use go-git, handle errors properly |
-| Create update-deps.md | `.claude/commands/` | New command file |
-| Update resolve-deps.md | `.claude/commands/` | Fix cache location documentation |
-| Update skill docs | `.claude/skills/specledger-deps/` | Add artifact_path documentation |
+| Update skill docs | `.claude/skills/specledger-deps/` | Comprehensive docs for all commands |
 
 ### Priority 2 (Important)
 
@@ -228,6 +230,10 @@ No specific beads identified yet. The feature spec references generic epic SL-26
 | Validation helpers | `pkg/cli/metadata/validator.go` | Validate artifact_path values |
 | Unit tests | `pkg/**/*_test.go` | Test new functionality |
 | Integration tests | `tests/integration/deps_test.go` | Test full workflow |
+
+### Note on Claude Command Files
+
+Only `add-deps.md` and `remove-deps.md` command files are needed. Other operations (list, update, resolve) are documented in the `specledger-deps` skill for reference.
 
 ---
 
