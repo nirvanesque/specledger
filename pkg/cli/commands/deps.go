@@ -10,7 +10,6 @@ import (
 	"github.com/specledger/specledger/pkg/cli/framework"
 	"github.com/specledger/specledger/pkg/cli/metadata"
 	"github.com/specledger/specledger/pkg/cli/ui"
-
 	"github.com/spf13/cobra"
 )
 

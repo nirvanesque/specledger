@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/spf13/cobra"
 	"github.com/specledger/specledger/pkg/cli/metadata"
 	"github.com/specledger/specledger/pkg/cli/prerequisites"
 	"github.com/specledger/specledger/pkg/cli/ui"
+	"github.com/spf13/cobra"
 )
 
 var (

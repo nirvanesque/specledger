@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/specledger/specledger/internal/spec"
-
 	"github.com/spf13/cobra"
 )
 

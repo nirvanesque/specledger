@@ -7,12 +7,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/spf13/cobra"
 	"github.com/specledger/specledger/pkg/cli/config"
 	"github.com/specledger/specledger/pkg/cli/logger"
 	"github.com/specledger/specledger/pkg/cli/prerequisites"
 	"github.com/specledger/specledger/pkg/cli/tui"
 	"github.com/specledger/specledger/pkg/cli/ui"
+	"github.com/spf13/cobra"
 )
 
 var (

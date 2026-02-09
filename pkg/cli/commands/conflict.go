@@ -6,7 +6,6 @@ import (
 
 	"github.com/specledger/specledger/internal/spec"
 	"github.com/specledger/specledger/pkg/models"
-
 	"github.com/spf13/cobra"
 )
 

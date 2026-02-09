@@ -7,7 +7,6 @@ import (
 
 	"github.com/specledger/specledger/internal/ref"
 	"github.com/specledger/specledger/internal/spec"
-
 	"github.com/spf13/cobra"
 )
 
