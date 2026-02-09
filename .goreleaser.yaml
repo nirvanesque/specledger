@@ -57,7 +57,9 @@ brews:
     repository:
       owner: specledger
       name: homebrew-specledger
-    # skip_upload: auto - removed since tap repo exists
+    skip_upload: true
+    # Note: Requires GitHub token with write access to homebrew-specledger repo
+    # TODO: Configure PAT or update repository permissions
 
 release:
   github:
