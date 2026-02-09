@@ -56,10 +56,9 @@ brews:
     license: MIT
     repository:
       owner: specledger
-      name: specledger
-      branch: main
-      folder: homebrew
-    skip_upload: false
+      name: homebrew-specledger
+    skip_upload: true
+    # TODO: Set up separate homebrew-specledger tap repo with proper permissions
 
 release:
   github:
