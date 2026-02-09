@@ -13,7 +13,7 @@ const (
 	MetadataVersion = "1.0.0"
 
 	// DefaultMetadataFile is the default filename for project metadata
-	DefaultMetadataFile = "specledger/specledger.yaml"
+	DefaultMetadataFile = "github.com/specledger/specledger/specledger.yaml"
 )
 
 // Load reads and parses a specledger.yaml file
@@ -63,14 +63,14 @@ func Save(metadata *ProjectMetadata, path string) error {
 }
 
 // LoadFromProject loads metadata from a project directory
-// It looks for specledger/specledger.yaml relative to projectRoot
+// It looks for github.com/specledger/specledger/specledger.yaml relative to projectRoot
 func LoadFromProject(projectRoot string) (*ProjectMetadata, error) {
 	metadataPath := filepath.Join(projectRoot, DefaultMetadataFile)
 	return Load(metadataPath)
 }
 
 // SaveToProject saves metadata to a project directory
-// It writes to specledger/specledger.yaml relative to projectRoot
+// It writes to github.com/specledger/specledger/specledger.yaml relative to projectRoot
 func SaveToProject(metadata *ProjectMetadata, projectRoot string) error {
 	metadataPath := filepath.Join(projectRoot, DefaultMetadataFile)
 	return Save(metadata, metadataPath)

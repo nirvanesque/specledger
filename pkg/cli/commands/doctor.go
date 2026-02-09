@@ -6,9 +6,9 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"specledger/pkg/cli/metadata"
-	"specledger/pkg/cli/prerequisites"
-	"specledger/pkg/cli/ui"
+	"github.com/specledger/specledger/pkg/cli/metadata"
+	"github.com/specledger/specledger/pkg/cli/prerequisites"
+	"github.com/specledger/specledger/pkg/cli/ui"
 )
 
 var (

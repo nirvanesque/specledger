@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"specledger/pkg/cli/playbooks"
-	"specledger/pkg/cli/ui"
+	"github.com/specledger/specledger/pkg/cli/playbooks"
+	"github.com/specledger/specledger/pkg/cli/ui"
 )
 
 // VarPlaybookCmd represents the playbook command

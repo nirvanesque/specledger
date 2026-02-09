@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"specledger/pkg/cli/commands"
+	"github.com/specledger/specledger/pkg/cli/commands"
 
 	"github.com/spf13/cobra"
 )
