@@ -10,11 +10,46 @@ $ARGUMENTS
 
 You **MUST** consider the user input before proceeding (if not empty).
 
+## Purpose
+
+Execute the implementation plan by processing all tasks in tasks.md (Beads). This command orchestrates the actual coding work following the defined task order and dependencies.
+
+**When to use**: After `/specledger.tasks` generates the task list.
+
 ## Outline
 
-1. Run `.specify/scripts/bash/check-prerequisites.sh --json --require-tasks --include-tasks` from repo root and parse FEATURE_DIR and AVAILABLE_DOCS list. All paths must be absolute. For single quotes in args like "I'm Groot", use escape syntax: e.g 'I'\''m Groot' (or double-quote if possible: "I'm Groot").
+1. **Sync issues from Supabase before starting** (to prevent conflicts):
+   - Detect repository owner and name from git remote:
+     ```powershell
+     $remoteUrl = git remote get-url origin
+     # Parse owner/repo from URL (e.g., github.com/Ne4nf/Spec.git)
+     if ($remoteUrl -match 'github\.com[:/]([^/]+)/([^/.]+)') {
+         $repoOwner = $matches[1]
+         $repoName = $matches[2]
+     }
+     ```
+   - If git remote detected, run auto-sync with Supabase credentials from environment:
+     ```bash
+     # Read credentials from environment variables
+     supabaseUrl="$SUPABASE_URL"
+     supabaseKey="$SUPABASE_KEY"
 
-2. **Check checklists status** (if FEATURE_DIR/checklists/ exists):
+     if [ -z "$supabaseUrl" ] || [ -z "$supabaseKey" ]; then
+       echo "⚠️  SUPABASE_URL and SUPABASE_KEY environment variables not set"
+       echo "   Skipping Supabase sync. Set these in .env or shell environment."
+       echo "   See README.md for configuration instructions."
+     else
+       node scripts/bd-sync-pull.js --repo-owner "$repoOwner" --repo-name "$repoName" --supabase-url "$supabaseUrl" --supabase-key "$supabaseKey"
+     fi
+     ```
+   - Show sync summary: issues fetched, status counts
+   - If sync fails (project not found, network error), WARN but allow proceed
+   - This ensures you see latest issue status from other team members
+   - Prevents working on issues already claimed by others
+
+2. Run `.specify/scripts/bash/check-prerequisites.sh --json --require-tasks --include-tasks` from repo root and parse FEATURE_DIR and AVAILABLE_DOCS list. All paths must be absolute. For single quotes in args like "I'm Groot", use escape syntax: e.g 'I'\''m Groot' (or double-quote if possible: "I'm Groot").
+
+3. **Check checklists status** (if FEATURE_DIR/checklists/ exists):
    - Scan all checklist files in the checklists/ directory
    - For each checklist, count:
      - Total items: All lines matching `- [ ]` or `- [X]` or `- [x]`
@@ -41,9 +76,9 @@ You **MUST** consider the user input before proceeding (if not empty).
    
    - **If all checklists are complete**:
      * Display the table showing all checklists passed
-     * Automatically proceed to step 3
+     * Automatically proceed to step 4
 
-3. Load and analyze the implementation context:
+4. Load and analyze the implementation context:
    - **REQUIRED**: Read tasks.md for the complete task list and execution plan
    - **REQUIRED**: Read plan.md for tech stack, architecture, and file structure
    - **IF EXISTS**: Read data-model.md for entities and relationships
@@ -51,7 +86,7 @@ You **MUST** consider the user input before proceeding (if not empty).
    - **IF EXISTS**: Read research.md for technical decisions and constraints
    - **IF EXISTS**: Read quickstart.md for integration scenarios
 
-4. **Project Setup Verification**:
+5. **Project Setup Verification**:
    - **REQUIRED**: Create/verify ignore files based on actual project setup:
    
    **Detection & Creation Logic**:
@@ -85,28 +120,28 @@ You **MUST** consider the user input before proceeding (if not empty).
    - **Prettier**: `node_modules/`, `dist/`, `build/`, `coverage/`, `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`
    - **Terraform**: `.terraform/`, `*.tfstate*`, `*.tfvars`, `.terraform.lock.hcl`
 
-5. Read tasks.md structure and use Beads to extract:
+6. Read tasks.md structure and use Beads to extract:
    - **Task phases**: Setup, Tests, Core, Integration, Polish
    - **Task dependencies**: Sequential vs parallel execution rules
    - **Task details**: ID, description, file paths, design + acceptance criteria
    - **Task comments**: Important notes and modifications to original plan
    - **Execution flow**: Order and dependency requirements
 
-6. Execute implementation following the task plan:
+7. Execute implementation following the task plan:
    - **Phase-by-phase execution**: Complete each phase before moving to the next
    - **Respect dependencies**: Run sequential tasks in order, parallel tasks [P] can run together  
    - **Follow TDD approach**: Execute test tasks before their corresponding implementation tasks
    - **File-based coordination**: Tasks affecting the same files must run sequentially
    - **Validation checkpoints**: Verify each phase completion before proceeding
 
-7. Implementation execution rules:
+8. Implementation execution rules:
    - **Setup first**: Initialize project structure, dependencies, configuration
    - **Tests before code**: If you need to write tests for contracts, entities, and integration scenarios
    - **Core development**: Implement models, services, CLI commands, endpoints
    - **Integration work**: Database connections, middleware, logging, external services
    - **Polish and validation**: Unit tests, performance optimization, documentation
 
-8. Progress tracking and error handling:
+9. Progress tracking and error handling:
    - Find ready tasks using `bd ready --label "spec:......"`
    - Update Beads Issues progress with Comments and Progress
    - Report progress after each completed task
@@ -116,7 +151,7 @@ You **MUST** consider the user input before proceeding (if not empty).
    - Suggest next steps if implementation cannot proceed
    - **IMPORTANT** For completed tasks, make sure to add relevant comments and update the Beads task status to "Closed"
 
-9. Completion validation:
+10. Completion validation:
    - Verify all required tasks are completed
    - Check that implemented features match the original specification
    - Validate that tests pass and coverage meets requirements

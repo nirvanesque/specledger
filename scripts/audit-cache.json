@@ -1,0 +1,306 @@
+{
+  "metadata": {
+    "project_name": "specledger (artifact-tracker)",
+    "project_type": "single-package",
+    "language": "typescript",
+    "framework": "nextjs",
+    "framework_version": "16.1.6",
+    "react_version": "19.2.4",
+    "analyzed_at": "2026-02-09T00:00:00.000Z",
+    "total_loc": 30839,
+    "file_count": 187
+  },
+  "global_context": {
+    "architecture_style": "4-layer-factory",
+    "api_pattern": "REST",
+    "auth_pattern": "supabase-rls-cookies",
+    "database": "supabase-postgresql",
+    "state_management": ["tanstack-query", "zustand"],
+    "ai_integration": "mastra-ai-sdk",
+    "common_patterns": [
+      "factory-functions",
+      "generic-crud",
+      "api-response-envelope",
+      "query-with-relations",
+      "co-located-hooks"
+    ]
+  },
+  "modules": [
+    {
+      "id": "data-repositories",
+      "name": "Data Repositories",
+      "description": "Generic CRUD repository layer using createRepo factory. Provides type-safe database access with QueryBuilder for relations.",
+      "type": "infrastructure",
+      "paths": ["src/supabase/repositories/"],
+      "entry_point": "src/supabase/repositories/index.ts",
+      "loc": 150,
+      "key_functions": [
+        "createRepo(tableName, options)",
+        "list(supabase, filters)",
+        "get(supabase, id)",
+        "create(supabase, data)",
+        "update(supabase, id, data)",
+        "delete(supabase, id)",
+        "withRelations(select)"
+      ],
+      "data_models": [
+        "projectRepo",
+        "projectMemberRepo",
+        "specRepo",
+        "artifactRepo",
+        "changeRepo",
+        "checkpointRepo",
+        "reviewRequestRepo",
+        "reviewCommentRepo",
+        "issueRepo",
+        "commentRepo",
+        "dependencyRepo",
+        "labelRepo",
+        "activityRepo"
+      ],
+      "api_contracts": [],
+      "dependencies": ["@supabase/supabase-js", "@/types"]
+    },
+    {
+      "id": "data-services",
+      "name": "Service Layer",
+      "description": "Business logic layer wrapping repositories with ApiResponse envelope and error handling. Two instantiation patterns: sync (client) and async factory (server).",
+      "type": "core-domain",
+      "paths": ["src/services/"],
+      "entry_point": "src/services/client.ts",
+      "loc": 200,
+      "key_functions": [
+        "createService(repo, supabase)",
+        "list(filters)",
+        "listWithRelations(select, filters)",
+        "get(id)",
+        "getWithRelations(id, select)",
+        "create(data)",
+        "update(id, data)",
+        "delete(id)"
+      ],
+      "data_models": [],
+      "api_contracts": [
+        "ApiResponse<T>",
+        "ApiSuccess<T>",
+        "ApiError"
+      ],
+      "dependencies": ["@/supabase/repositories", "@/types"]
+    },
+    {
+      "id": "data-hooks",
+      "name": "TanStack Query Hooks",
+      "description": "React hooks layer using createHooks factory. Generates useList, useGet, useCreate, useUpdate, useDelete with auto cache invalidation.",
+      "type": "ui",
+      "paths": ["src/hooks/api/"],
+      "entry_point": "src/hooks/api/index.ts",
+      "loc": 800,
+      "key_functions": [
+        "createHooks(entityName, service)",
+        "useList(filters, options)",
+        "useListWithRelations(select, filters, options)",
+        "useGet(id, options)",
+        "useGetWithRelations(id, select, options)",
+        "useCreate()",
+        "useUpdate()",
+        "useDelete()"
+      ],
+      "data_models": [
+        "projectKeys",
+        "specKeys",
+        "artifactKeys",
+        "changeKeys",
+        "checkpointKeys",
+        "issueKeys",
+        "activityKeys"
+      ],
+      "api_contracts": [],
+      "dependencies": ["@tanstack/react-query", "@/services/client", "@/types"]
+    },
+    {
+      "id": "github-integration",
+      "name": "GitHub Integration",
+      "description": "GitHub App OAuth, installation management, and API operations. Handles file content, commits, branches, webhooks via Octokit.",
+      "type": "integration",
+      "paths": [
+        "src/lib/github.ts",
+        "src/hooks/api/github.ts",
+        "src/app/api/github/"
+      ],
+      "entry_point": "src/lib/github.ts",
+      "loc": 900,
+      "key_functions": [
+        "generateAppJWT()",
+        "getInstallationAccessToken(installationId)",
+        "getUserInstallation(owner)",
+        "getUserInstallations()",
+        "getOctokit(token)",
+        "useGitHubFileContent(params)",
+        "useGetCommit(params)",
+        "useCreateGitHubBranch()",
+        "useCommitFileContent()",
+        "useCommitMultipleFiles()",
+        "useBatchGitHubFileContents(params)",
+        "useUserRepositories(installationId)",
+        "useCreateGitHubWebhook()"
+      ],
+      "data_models": [
+        "UserInstallation",
+        "GitHubInstallationAccount",
+        "GitHubInstallationRepo",
+        "GitHubFile",
+        "GitHubFileContent",
+        "GitHubCommit",
+        "CompareCommitsResponse",
+        "FileChange",
+        "BatchFileContent"
+      ],
+      "api_contracts": [
+        "GET /api/github/commits/[ref]",
+        "GET /api/github/contents/[...path]",
+        "POST /api/github/contents/[...path]",
+        "GET /api/github/refs",
+        "POST /api/github/refs",
+        "POST /api/github/batch-contents",
+        "GET /api/github/installation/repositories",
+        "POST /api/github/hooks"
+      ],
+      "dependencies": ["octokit", "jsonwebtoken", "@supabase/supabase-js"]
+    },
+    {
+      "id": "mastra-ai",
+      "name": "Mastra AI Layer",
+      "description": "AI agent for spec editing with tools for file operations and canvas artifact generation. Uses Anthropic/OpenAI providers.",
+      "type": "integration",
+      "paths": ["src/mastra/"],
+      "entry_point": "src/mastra/index.ts",
+      "loc": 450,
+      "key_functions": [
+        "specAgent (Agent)",
+        "listSpecFilesTool",
+        "getSpecFileContentTool",
+        "editSpecFileTool",
+        "createCanvasArtifactTool",
+        "getDefaultModel()",
+        "fetchFileContent(filePath, owner, repo, branch)"
+      ],
+      "data_models": [
+        "CanvasArtifact",
+        "CanvasArtifactType",
+        "CanvasContentFormat"
+      ],
+      "api_contracts": [
+        "POST /api/specs/[sid]/chat"
+      ],
+      "dependencies": ["@mastra/core", "@mastra/memory", "@ai-sdk/anthropic", "@ai-sdk/openai", "diff"]
+    },
+    {
+      "id": "types-system",
+      "name": "Type Definitions",
+      "description": "TypeScript types derived from Supabase schema. Auto-generated database.ts plus manual Row/Insert/Update exports per entity.",
+      "type": "utility",
+      "paths": ["src/types/"],
+      "entry_point": "src/types/index.ts",
+      "loc": 350,
+      "key_functions": [
+        "createSuccessResponse(data, message)",
+        "createErrorResponse(code, message, details)",
+        "getSandpackTemplate(template)",
+        "getDefaultFiles(template)"
+      ],
+      "data_models": [
+        "Project/ProjectInsert/ProjectUpdate",
+        "ProjectMember/ProjectMemberInsert/ProjectMemberUpdate",
+        "Spec/SpecInsert/SpecUpdate",
+        "Artifact/ArtifactInsert/ArtifactUpdate",
+        "Change/ChangeInsert/ChangeUpdate",
+        "Checkpoint/CheckpointInsert/CheckpointUpdate",
+        "ReviewRequest/ReviewRequestInsert/ReviewRequestUpdate",
+        "ReviewComment/ReviewCommentInsert/ReviewCommentUpdate",
+        "Issue/IssueInsert/IssueUpdate",
+        "Comment/CommentInsert/CommentUpdate",
+        "Dependency/DependencyInsert/DependencyUpdate",
+        "Label/LabelInsert/LabelUpdate",
+        "Activity/ActivityInsert/ActivityUpdate",
+        "IssueWithRelations",
+        "ActivityWithProject",
+        "ActivityWithSpec"
+      ],
+      "api_contracts": [
+        "ApiResponse<T>",
+        "ApiSuccess<T>",
+        "ApiError",
+        "PaginatedResponse<T>",
+        "DbResult<T>"
+      ],
+      "dependencies": []
+    },
+    {
+      "id": "ui-components",
+      "name": "UI Components",
+      "description": "Feature-grouped React components plus shadcn/ui primitives. Includes home dashboard, issues kanban, specs management, shared utilities.",
+      "type": "ui",
+      "paths": ["src/components/"],
+      "entry_point": "src/components/ui/button.tsx",
+      "loc": 4500,
+      "key_functions": [],
+      "data_models": [],
+      "api_contracts": [],
+      "dependencies": ["@radix-ui/*", "lucide-react", "class-variance-authority", "@tanstack/react-query"]
+    },
+    {
+      "id": "app-routes",
+      "name": "App Router Pages",
+      "description": "Next.js App Router with route groups: (auth) for login, (callback) for OAuth, (main) for protected content. Parallel routes for issue modals.",
+      "type": "ui",
+      "paths": ["src/app/"],
+      "entry_point": "src/app/layout.tsx",
+      "loc": 3500,
+      "key_functions": [],
+      "data_models": [],
+      "api_contracts": [],
+      "dependencies": ["next", "react"]
+    },
+    {
+      "id": "supabase-clients",
+      "name": "Supabase Clients",
+      "description": "Supabase client instantiation for browser, server, and admin contexts. Includes proxy utilities.",
+      "type": "infrastructure",
+      "paths": [
+        "src/supabase/client.ts",
+        "src/supabase/server.ts",
+        "src/supabase/admin.ts",
+        "src/supabase/proxy.ts"
+      ],
+      "entry_point": "src/supabase/client.ts",
+      "loc": 200,
+      "key_functions": [
+        "createClient() (browser)",
+        "createClient() (server async)",
+        "createAdminClient()"
+      ],
+      "data_models": [],
+      "api_contracts": [],
+      "dependencies": ["@supabase/supabase-js", "@supabase/ssr"]
+    },
+    {
+      "id": "lib-utilities",
+      "name": "Utility Libraries",
+      "description": "Shared utilities including class name merging, file helpers, spec phase logic, project auth, sidebar constants.",
+      "type": "utility",
+      "paths": ["src/lib/"],
+      "entry_point": "src/lib/utils.ts",
+      "loc": 450,
+      "key_functions": [
+        "cn(...inputs)",
+        "getFileExtension(filename)",
+        "getLanguageFromExtension(extension)",
+        "getSpecPhase(spec)",
+        "getSpecPhaseLabel(phase)"
+      ],
+      "data_models": [],
+      "api_contracts": [],
+      "dependencies": ["clsx", "tailwind-merge"]
+    }
+  ]
+}
