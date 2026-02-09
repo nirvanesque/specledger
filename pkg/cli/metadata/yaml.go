@@ -80,7 +80,8 @@ func SaveToProject(metadata *ProjectMetadata, projectRoot string) error {
 func NewProjectMetadata(name, shortCode string, playbookName string, playbookVersion string, playbookStructure []string) *ProjectMetadata {
 	now := time.Now()
 	metadata := &ProjectMetadata{
-		Version: MetadataVersion,
+		Version:      MetadataVersion,
+		ArtifactPath: "specledger/", // Default artifact path for new projects
 		Project: ProjectInfo{
 			Name:      name,
 			ShortCode: shortCode,
