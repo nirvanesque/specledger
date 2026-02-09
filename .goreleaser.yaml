@@ -57,7 +57,8 @@ brews:
     repository:
       owner: specledger
       name: homebrew-specledger
-    # skip_upload: auto - removed since tap repo exists
+    skip_upload: true
+    # TODO: Set up separate homebrew-specledger tap repo with proper permissions
 
 release:
   github:
