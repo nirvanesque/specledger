@@ -33,38 +33,36 @@ sl init --artifact-path specledger/
 ### 2. Add Your First Dependency
 
 ```bash
-# Add a SpecLedger repository (auto-detects artifact_path)
-sl deps add git@github.com:org/platform-specs main specs/ --alias platform
+# Add a SpecLedger repository (auto-detects artifact_path, auto-downloads)
+sl deps add git@github.com:org/platform-specs --alias platform
+
+# Add with specific branch
+sl deps add git@github.com:org/platform-specs --alias platform --branch develop
 
 # Add a non-SpecLedger repository (specify artifact_path manually)
-sl deps add https://github.com/external/api-docs --artifact-path docs/openapi/ --alias api
+sl deps add https://github.com/external/api-docs --alias api --artifact-path docs/openapi/
 ```
 
-### 3. Resolve Dependencies
-
-```bash
-# Download and cache all dependencies
-sl deps resolve
-```
+**Note**: `sl deps add` automatically downloads and caches the dependency. No separate resolve step needed!
 
 Output:
 ```
-Resolving Dependencies
-Resolving 2 dependencies...
+Adding dependency platform...
+Detecting artifact_path from specledger.yaml...
+  Found: specs/
 
-1. git@github.com:org/platform-specs
-   Alias:  platform
-   Cache:  /Users/user/.specledger/cache/platform-specs
-   Status: ✓ abc123def4
+Downloading dependency...
+  Cache:  /Users/user/.specledger/cache/platform-specs
+  Status: ✓ abc123def4
 
-2. https://github.com/external/api-docs
-   Cache:  /Users/user/.specledger/cache/api-docs
-   Status: ✓ def456abc1
-
-Resolved 2/2 dependencies
+Dependency added
+  Repository:  git@github.com:org/platform-specs
+  Alias:       platform
+  Branch:      main
+  Artifact Path: specs/
 ```
 
-### 4. List Dependencies
+### 3. List Dependencies
 
 ```bash
 sl deps list
@@ -76,7 +74,6 @@ Dependencies (2 total)
 
 1. git@github.com:org/platform-specs
    Branch:  main
-   Path:    platform
    Alias:   platform
    Artifact Path: specs/
    Status:  ✓ abc123def4
@@ -87,9 +84,9 @@ Dependencies (2 total)
    Status:  ✓ def456abc1
 ```
 
-### 5. Reference Artifacts
+### 4. Reference Artifacts
 
-Once dependencies are resolved, reference them using the `alias:artifact` format:
+Once dependencies are added and downloaded, reference them using the `alias:artifact` format:
 
 ```
 # Reference platform's core spec
@@ -112,7 +109,7 @@ sl deps add git@github.com:org/shared-specs --alias shared
 ```
 
 The system will:
-1. Clone the repository temporarily
+1. Clone the repository to cache
 2. Read its `specledger.yaml`
 3. Extract the `artifact_path` value
 4. Store it in your dependency configuration
@@ -150,6 +147,16 @@ sl deps remove platform
 sl deps remove git@github.com:org/specs
 ```
 
+### Manual Refresh (like `go mod download`)
+
+If you need to re-download all dependencies (e.g., after cloning a project):
+
+```bash
+sl deps resolve
+```
+
+This refreshes the cache with the latest commits from each dependency's branch.
+
 ---
 
 ## Understanding artifact_path
@@ -180,7 +187,7 @@ The system resolves it as:
 Example:
 ```
 project.artifact_path: specledger/
-dependency.path: platform
+dependency.alias: platform
 dependency.artifact_path: specs/ (for finding files in cache)
 
 Result: specledger/platform/api.md
@@ -230,7 +237,6 @@ artifact_path: specledger/
 dependencies:
   - url: git@github.com:org/api-specs
      artifact_path: docs/
-     path: api
      alias: api
 ```
 
@@ -247,13 +253,12 @@ artifact_path: docs/specifications/
 dependencies:
   - url: git@github.com:org/platform
      artifact_path: specs/
-     path: platform-core
      alias: platform
 ```
 
 ```
 Reference: platform:auth/requirements.md
-Resolves to: docs/specifications/platform-core/auth/requirements.md
+Resolves to: docs/specifications/platform/auth/requirements.md
 ```
 
 ### Example 3: Multiple Dependencies
@@ -264,11 +269,9 @@ artifact_path: specledger/
 dependencies:
   - url: git@github.com:org/auth-specs
      alias: auth
-     path: auth
      artifact_path: specs/
   - url: git@github.com:org/data-specs
      alias: data
-     path: data
      artifact_path: documentation/
 ```
 
@@ -333,7 +336,6 @@ dependencies:
   - url: git@github.com:org/platform-specs
     branch: main
     artifact_path: specs/
-    path: platform
     alias: platform
     resolved_commit: abc123def456789abc123def456789abc123def4
     framework: both
@@ -342,7 +344,6 @@ dependencies:
   - url: https://github.com/external/api-docs
     branch: v2.0
     artifact_path: docs/openapi/
-    path: api-docs
     alias: api-docs
     resolved_commit: def456abc123789def456abc123789def456abc12
     framework: none
