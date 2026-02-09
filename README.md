@@ -147,10 +147,13 @@ Dependencies allow you to reference external specifications from other teams or 
 | `sl deps remove <url>` | Remove a dependency |
 | `sl deps resolve` | Download and cache dependencies |
 | `sl deps update` | Update dependencies to latest versions |
+| `sl deps link` | Create symlinks from cached dependencies to project directory |
 
 **Artifact Path**: For SpecLedger repositories, the `artifact_path` is auto-detected from the dependency's `specledger.yaml`. For non-SpecLedger repositories, use `--artifact-path` to specify where specifications are located (e.g., `docs/openapi/`).
 
 **Reference Format**: Dependencies can be referenced using the `alias:artifact` syntax in specifications. For example, if you add a dependency with `--alias api`, you can reference its artifacts as `api:spec.md` or `api:contracts/user-api.proto`.
+
+**Linking Dependencies**: After adding dependencies, run `sl deps link` to create symlinks from the cached dependencies to your project's artifact directory. This makes the dependency files available at paths like `specledger/<alias>/` for Claude Code and other tools to access.
 
 ### Workflows
 

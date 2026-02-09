@@ -82,8 +82,20 @@ var VarDepsUpdateCmd = &cobra.Command{
 	RunE: runUpdateDependencies,
 }
 
+// VarLinkCmd represents the link command
+var VarLinkCmd = &cobra.Command{
+	Use:   "link",
+	Short: "Create symlinks from cached dependencies to project artifacts directory",
+	Long:  `Create symlinks from cached dependencies to the project's artifacts directory, making them available for Claude Code and other tools.
+
+This command creates symlinks from ~/.specledger/cache/<alias>/ to <project.artifact_path>/<alias>/, allowing reference paths like "alias:artifact.md" to resolve to actual files.
+
+Example:  sl deps link`,
+	RunE: runLinkDependencies,
+}
+
 func init() {
-	VarDepsCmd.AddCommand(VarAddCmd, VarDepsListCmd, VarResolveCmd, VarDepsUpdateCmd, VarRemoveCmd)
+	VarDepsCmd.AddCommand(VarAddCmd, VarDepsListCmd, VarResolveCmd, VarDepsUpdateCmd, VarLinkCmd, VarRemoveCmd)
 
 	VarAddCmd.Flags().StringP("alias", "a", "", "Required alias for the dependency (used as reference path)")
 	VarAddCmd.MarkFlagRequired("alias")
@@ -626,6 +638,102 @@ func runUpdateDependencies(cmd *cobra.Command, args []string) error {
 		ui.PrintSuccess(fmt.Sprintf("Updated %d dependencies", updatesAvailable))
 	} else {
 		ui.PrintSuccess("All dependencies are up to date")
+	}
+	fmt.Println()
+
+	return nil
+}
+
+func runLinkDependencies(cmd *cobra.Command, args []string) error {
+	projectDir, err := findProjectRoot()
+	if err != nil {
+		return fmt.Errorf("failed to find project root: %w", err)
+	}
+
+	meta, err := metadata.LoadFromProject(projectDir)
+	if err != nil {
+		return fmt.Errorf("failed to load metadata: %w", err)
+	}
+
+	if len(meta.Dependencies) == 0 {
+		return fmt.Errorf("no dependencies to link")
+	}
+
+	// Get project's artifact path
+	projectArtifactPath := meta.GetArtifactPath()
+	if projectArtifactPath == "" {
+		return fmt.Errorf("project artifact_path is not set in specledger.yaml")
+	}
+
+	ui.PrintSection("Linking Dependencies")
+	fmt.Printf("Creating symlinks from cache to %s\n", ui.Bold(projectArtifactPath))
+	fmt.Println()
+
+	homeDir, _ := os.UserHomeDir()
+	linkedCount := 0
+
+	for _, dep := range meta.Dependencies {
+		if dep.Alias == "" {
+			continue
+		}
+
+		// Get cache directory
+		cacheDir := filepath.Join(homeDir, ".specledger", "cache", dep.Alias)
+
+		// Check if dependency is cached
+		if _, err := os.Stat(cacheDir); os.IsNotExist(err) {
+			ui.PrintWarning(fmt.Sprintf("Dependency %s is not cached (run 'sl deps resolve' first)", dep.Alias))
+			continue
+		}
+
+		// Get dependency's artifact path
+		depArtifactPath := dep.ArtifactPath
+		if depArtifactPath == "" {
+			ui.PrintWarning(fmt.Sprintf("Dependency %s has no artifact_path", dep.Alias))
+			continue
+		}
+
+		// Source: cache_dir/dep_artifact_path
+		sourceDir := filepath.Join(cacheDir, depArtifactPath)
+
+		// Check if source exists
+		if _, err := os.Stat(sourceDir); os.IsNotExist(err) {
+			ui.PrintWarning(fmt.Sprintf("Artifact path not found in cache: %s", sourceDir))
+			continue
+		}
+
+		// Target: project_dir/project_artifact_path/alias
+		targetDir := filepath.Join(projectDir, projectArtifactPath, dep.Alias)
+
+		// Create parent directory if it doesn't exist
+		if err := os.MkdirAll(filepath.Dir(targetDir), 0755); err != nil {
+			ui.PrintWarning(fmt.Sprintf("Failed to create parent directory: %v", err))
+			continue
+		}
+
+		// Remove existing symlink or directory
+		if _, err := os.Lstat(targetDir); err == nil {
+			os.RemoveAll(targetDir)
+		}
+
+		// Create symlink
+		if err := os.Symlink(sourceDir, targetDir); err != nil {
+			ui.PrintWarning(fmt.Sprintf("Failed to create symlink for %s: %v", dep.Alias, err))
+			continue
+		}
+
+		fmt.Printf("  %s -> %s\n", ui.Cyan(dep.Alias), ui.Gray(sourceDir))
+		linkedCount++
+	}
+
+	fmt.Println()
+	if linkedCount > 0 {
+		ui.PrintSuccess(fmt.Sprintf("Linked %d dependencies", linkedCount))
+		fmt.Println()
+		fmt.Println("Dependencies are now available at:")
+		fmt.Printf("  %s/<alias>/\n", projectArtifactPath)
+	} else {
+		ui.PrintWarning("No dependencies were linked")
 	}
 	fmt.Println()
 
