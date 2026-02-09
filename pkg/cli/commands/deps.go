@@ -88,14 +88,28 @@ var VarLinkCmd = &cobra.Command{
 	Short: "Create symlinks from cached dependencies to project artifacts directory",
 	Long: `Create symlinks from cached dependencies to the project's artifacts directory, making them available for Claude Code and other tools.
 
-This command creates symlinks from ~/.specledger/cache/<alias>/ to <project.artifact_path>/<alias>/, allowing reference paths like "alias:artifact.md" to resolve to actual files.
+This command creates symlinks from ~/.specledger/cache/<alias>/ to <project.artifact_path>/deps/<alias>/, allowing reference paths like "alias:artifact.md" to resolve to actual files.
 
 Example:  sl deps link`,
 	RunE: runLinkDependencies,
 }
 
+// VarUnlinkCmd represents the unlink command
+var VarUnlinkCmd = &cobra.Command{
+	Use:   "unlink [alias]",
+	Short: "Remove symlinks for dependencies",
+	Long:  `Remove symlinks for dependencies from the project's artifacts directory.
+
+If no alias is specified, removes all dependency symlinks. If an alias is specified, only removes that dependency's symlink.
+
+Example:  sl deps unlink      # Unlink all
+  sl deps unlink api    # Unlink specific dependency`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: runUnlinkDependencies,
+}
+
 func init() {
-	VarDepsCmd.AddCommand(VarAddCmd, VarDepsListCmd, VarResolveCmd, VarDepsUpdateCmd, VarLinkCmd, VarRemoveCmd)
+	VarDepsCmd.AddCommand(VarAddCmd, VarDepsListCmd, VarResolveCmd, VarDepsUpdateCmd, VarLinkCmd, VarUnlinkCmd, VarRemoveCmd)
 
 	VarAddCmd.Flags().StringP("alias", "a", "", "Required alias for the dependency (used as reference path)")
 	_ = VarAddCmd.MarkFlagRequired("alias")
@@ -491,7 +505,7 @@ func runResolveDependencies(cmd *cobra.Command, args []string) error {
 		}
 		if linkedCount > 0 {
 			ui.PrintSuccess(fmt.Sprintf("Linked %d dependencies", linkedCount))
-			fmt.Printf("  Dependencies are now available at: %s/<alias>/\n", meta.GetArtifactPath())
+			fmt.Printf("  Dependencies are now available at: %s/deps/<alias>/\n", meta.GetArtifactPath())
 		}
 		fmt.Println()
 	}
@@ -693,7 +707,7 @@ func runLinkDependencies(cmd *cobra.Command, args []string) error {
 	}
 
 	ui.PrintSection("Linking Dependencies")
-	fmt.Printf("Creating symlinks from cache to %s\n", ui.Bold(projectArtifactPath))
+	fmt.Printf("Creating symlinks from cache to %s/deps/\n", ui.Bold(projectArtifactPath))
 	fmt.Println()
 
 	homeDir, _ := os.UserHomeDir()
@@ -729,8 +743,8 @@ func runLinkDependencies(cmd *cobra.Command, args []string) error {
 			continue
 		}
 
-		// Target: project_dir/project_artifact_path/alias
-		targetDir := filepath.Join(projectDir, projectArtifactPath, dep.Alias)
+		// Target: project_dir/project_artifact_path/deps/alias
+		targetDir := filepath.Join(projectDir, projectArtifactPath, "deps", dep.Alias)
 
 		// Create parent directory if it doesn't exist
 		if err := os.MkdirAll(filepath.Dir(targetDir), 0755); err != nil {
@@ -758,7 +772,7 @@ func runLinkDependencies(cmd *cobra.Command, args []string) error {
 		ui.PrintSuccess(fmt.Sprintf("Linked %d dependencies", linkedCount))
 		fmt.Println()
 		fmt.Println("Dependencies are now available at:")
-		fmt.Printf("  %s/<alias>/\n", projectArtifactPath)
+		fmt.Printf("  %s/deps/<alias>/\n", projectArtifactPath)
 	} else {
 		ui.PrintWarning("No dependencies were linked")
 	}
@@ -802,8 +816,8 @@ func linkDependency(projectDir string, meta *metadata.ProjectMetadata, dep metad
 		return fmt.Errorf("artifact path not found in cache: %s", sourceDir)
 	}
 
-	// Target: project_dir/project_artifact_path/alias
-	targetDir := filepath.Join(projectDir, projectArtifactPath, dep.Alias)
+	// Target: project_dir/project_artifact_path/deps/alias
+	targetDir := filepath.Join(projectDir, projectArtifactPath, "deps", dep.Alias)
 
 	// Create parent directory if it doesn't exist
 	if err := os.MkdirAll(filepath.Dir(targetDir), 0755); err != nil {
@@ -852,6 +866,88 @@ func isValidGitURL(s string) bool {
 		strings.HasPrefix(s, "/") || // Local absolute path
 		strings.HasPrefix(s, "./") || // Local relative path
 		strings.HasPrefix(s, "../"))
+}
+
+func runUnlinkDependencies(cmd *cobra.Command, args []string) error {
+	projectDir, err := findProjectRoot()
+	if err != nil {
+		return fmt.Errorf("failed to find project root: %w", err)
+	}
+
+	meta, err := metadata.LoadFromProject(projectDir)
+	if err != nil {
+		return fmt.Errorf("failed to load metadata: %w", err)
+	}
+
+	if len(meta.Dependencies) == 0 {
+		return fmt.Errorf("no dependencies to unlink")
+	}
+
+	// Get project's artifact path
+	projectArtifactPath := meta.GetArtifactPath()
+	if projectArtifactPath == "" {
+		return fmt.Errorf("project artifact_path is not set in specledger.yaml")
+	}
+
+	// Determine which dependencies to unlink
+	targetAlias := ""
+	if len(args) > 0 {
+		targetAlias = args[0]
+	}
+
+	ui.PrintSection("Unlinking Dependencies")
+
+	unlinkedCount := 0
+	for _, dep := range meta.Dependencies {
+		// Skip if targeting specific alias and this doesn't match
+		if targetAlias != "" && dep.Alias != targetAlias {
+			continue
+		}
+
+		if dep.Alias == "" {
+			continue
+		}
+
+		// Target: project_dir/project_artifact_path/deps/alias
+		targetDir := filepath.Join(projectDir, projectArtifactPath, "deps", dep.Alias)
+
+		// Check if target exists
+		targetInfo, err := os.Lstat(targetDir)
+		if err != nil {
+			// Doesn't exist, skip
+			continue
+		}
+
+		// Only remove symlinks, not real directories
+		if targetInfo.Mode()&os.ModeSymlink != 0 {
+			if err := os.Remove(targetDir); err != nil {
+				ui.PrintWarning(fmt.Sprintf("Failed to unlink %s: %v", dep.Alias, err))
+			} else {
+				fmt.Printf("  Removed: %s\n", ui.Cyan(dep.Alias))
+				unlinkedCount++
+			}
+		} else {
+			ui.PrintWarning(fmt.Sprintf("Skipping %s: not a symlink (real directory)", dep.Alias))
+		}
+	}
+
+	fmt.Println()
+	if targetAlias != "" {
+		if unlinkedCount > 0 {
+			ui.PrintSuccess(fmt.Sprintf("Unlinked dependency: %s", targetAlias))
+		} else {
+			ui.PrintWarning(fmt.Sprintf("Dependency %s was not linked", targetAlias))
+		}
+	} else {
+		if unlinkedCount > 0 {
+			ui.PrintSuccess(fmt.Sprintf("Unlinked %d dependencies", unlinkedCount))
+		} else {
+			ui.PrintWarning("No dependencies were linked")
+		}
+	}
+	fmt.Println()
+
+	return nil
 }
 
 func findProjectRoot() (string, error) {
