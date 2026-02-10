@@ -17,7 +17,7 @@ import path from 'path'
 import os from 'os'
 
 const CREDENTIALS_FILE = path.join(os.homedir(), '.specledger', 'credentials.json')
-const SUPABASE_URL = 'https://lmjpnzplurfnojfqtqly.supabase.co'
+const SUPABASE_URL = 'https://iituikpbiesgofuraclk.supabase.co'
 
 // Load access token from credentials file
 function loadAccessToken() {
