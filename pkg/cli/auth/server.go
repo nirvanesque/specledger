@@ -57,7 +57,8 @@ func NewCallbackServerWithPort(port int, frontendURL string) (*CallbackServer, e
 	mux.HandleFunc("/callback", cs.handleCallback)
 
 	cs.server = &http.Server{
-		Handler: mux,
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	return cs, nil
@@ -124,9 +125,9 @@ func (cs *CallbackServer) handleCallback(w http.ResponseWriter, r *http.Request)
 		result.UserID = q.Get("user_id")
 		result.Error = q.Get("error")
 
-		// Parse expires_in if present
+		// Parse expires_in if present (ignore parse errors, default to 0)
 		if expiresIn := q.Get("expires_in"); expiresIn != "" {
-			fmt.Sscanf(expiresIn, "%d", &result.ExpiresIn)
+			_, _ = fmt.Sscanf(expiresIn, "%d", &result.ExpiresIn)
 		}
 	}
 

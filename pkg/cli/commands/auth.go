@@ -141,7 +141,7 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to start authentication server: %w", err)
 	}
-	defer server.Shutdown()
+	defer func() { _ = server.Shutdown() }()
 
 	server.Start()
 
