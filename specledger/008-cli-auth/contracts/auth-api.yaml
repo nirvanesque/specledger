@@ -1,0 +1,122 @@
+openapi: 3.0.3
+info:
+  title: SpecLedger CLI Authentication API
+  description: API contracts for CLI authentication flow
+  version: 1.0.0
+
+servers:
+  - url: https://app.specledger.io
+    description: Production server
+  - url: http://localhost:3000
+    description: Development server
+
+paths:
+  /cli/auth:
+    get:
+      summary: Authentication page
+      description: Web page where user authenticates. After auth, redirects to CLI callback URL.
+      parameters:
+        - name: callback
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uri
+          description: CLI callback URL (e.g., http://127.0.0.1:2026/callback)
+      responses:
+        '200':
+          description: Authentication page rendered
+        '302':
+          description: Redirect to callback URL after authentication
+
+  /api/cli/refresh:
+    post:
+      summary: Refresh access token
+      description: Exchange a refresh token for a new access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '200':
+          description: Token refreshed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshTokenResponse'
+        '401':
+          description: Invalid or expired refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    RefreshTokenRequest:
+      type: object
+      required:
+        - refresh_token
+      properties:
+        refresh_token:
+          type: string
+          description: The refresh token to exchange
+
+    RefreshTokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          description: New JWT access token
+        refresh_token:
+          type: string
+          description: New or existing refresh token
+        expires_in:
+          type: integer
+          format: int64
+          description: Token expiration in seconds
+          default: 3600
+        email:
+          type: string
+          format: email
+          description: User's email address
+        user_id:
+          type: string
+          description: User's unique identifier
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error code
+        error_description:
+          type: string
+          description: Human-readable error message
+
+    CallbackParams:
+      type: object
+      description: Parameters sent to CLI callback (GET query params or POST JSON)
+      properties:
+        access_token:
+          type: string
+          description: JWT access token
+        refresh_token:
+          type: string
+          description: Refresh token
+        expires_in:
+          type: integer
+          format: int64
+          description: Token expiration in seconds
+        email:
+          type: string
+          format: email
+          description: User's email address
+        user_id:
+          type: string
+          description: User's unique identifier
+        error:
+          type: string
+          description: Error message if authentication failed
