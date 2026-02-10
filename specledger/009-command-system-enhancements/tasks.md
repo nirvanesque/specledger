@@ -7,7 +7,7 @@ This index does **not contain tasks directly**—those are fully managed through
 
 ## Feature Tracking
 
-* **Beads Epic ID**: `SL-13u`
+* **Beads Epic ID**: `SL-20y`
 * **User Stories Source**: `specledger/009-command-system-enhancements/spec.md`
 * **Research Inputs**: N/A (documents existing changes)
 * **Planning Details**: `specledger/009-command-system-enhancements/plan.md`
@@ -26,7 +26,7 @@ bd list --label spec:009-command-system-enhancements --limit 30
 bd list --label spec:009-command-system-enhancements --label story:US1
 
 # See dependencies for epic
-bd dep tree SL-13u
+bd dep tree SL-20y
 
 # View issues by component
 bd list --label component:commands --label spec:009-command-system-enhancements
@@ -38,53 +38,53 @@ bd list --type feature --label spec:009-command-system-enhancements
 ## Tasks and Phases Structure
 
 ```
-Epic: SL-13u (Command System Enhancements) CLOSED
-├── Feature: SL-if7 (Setup: Path Standardization) CLOSED
-│   ├── Task: SL-ftu (Update adopt-feature-branch.sh paths) CLOSED
-│   ├── Task: SL-awv (Update create-new-feature.sh paths) CLOSED
-│   ├── Task: SL-dnd (Update common.sh paths) CLOSED
-│   ├── Task: SL-7pi (Update setup-plan.sh paths) CLOSED
-│   └── Task: SL-eak (Update update-agent-context.sh paths) CLOSED
-├── Feature: SL-96v (US1: Help Command) CLOSED
-│   └── Task: SL-ttc (Create specledger.help.md) CLOSED
-├── Feature: SL-ky5 (US2: Audit Command) CLOSED
-│   └── Task: SL-c1n (Create specledger.audit.md) CLOSED
-├── Feature: SL-2x9 (US3: Revise Command) CLOSED
-│   └── Task: SL-zig (Create specledger.revise.md) CLOSED
-├── Feature: SL-mye (US4: Implement Sync) CLOSED
-│   └── Task: SL-0tv (Add Supabase sync) CLOSED
-├── Feature: SL-7o3 (US5: Adopt from Audit) CLOSED
-│   └── Task: SL-tku (Add --from-audit mode) CLOSED
-├── Feature: SL-6t7 (Enhanced: Purpose Sections) CLOSED
-│   └── Task: SL-7kz (Add Purpose sections to 8 commands) CLOSED
-├── Feature: SL-4v4 (Utility Scripts) CLOSED
-│   ├── Task: SL-b5g (Create pull-issues.js) CLOSED
-│   └── Task: SL-abo (Create review-comments.js) CLOSED
-└── Task: SL-pl5 (Simplify AGENTS.md) CLOSED
+Epic: SL-20y (Command System Enhancements) CLOSED
+├── Feature: SL-55w (Setup: Path Standardization) CLOSED
+│   ├── Task: SL-cpd (Update adopt-feature-branch.sh paths) CLOSED
+│   ├── Task: SL-f66 (Update create-new-feature.sh paths) CLOSED
+│   ├── Task: SL-07w (Update common.sh paths) CLOSED
+│   ├── Task: SL-e64 (Update setup-plan.sh paths) CLOSED
+│   └── Task: SL-6lz (Update update-agent-context.sh paths) CLOSED
+├── Feature: SL-9i4 (US1: Help Command) CLOSED
+│   └── Task: SL-lpt (Create specledger.help.md) CLOSED
+├── Feature: SL-qoo (US2: Audit Command) CLOSED
+│   └── Task: SL-24n (Create specledger.audit.md) CLOSED
+├── Feature: SL-32j (US3: Revise Command) CLOSED
+│   └── Task: SL-oe7 (Create specledger.revise.md) CLOSED
+├── Feature: SL-as7 (US4: Implement Sync) CLOSED
+│   └── Task: SL-yh6 (Add Supabase sync) CLOSED
+├── Feature: SL-cu9 (US5: Adopt from Audit) CLOSED
+│   └── Task: SL-8jk (Add --from-audit mode) CLOSED
+├── Feature: SL-wsx (Enhanced: Purpose Sections) CLOSED
+│   └── Task: SL-xuz (Add Purpose sections to 8 commands) CLOSED
+├── Feature: SL-ovf (Utility Scripts) CLOSED
+│   ├── Task: SL-ya5 (Create pull-issues.js) CLOSED
+│   └── Task: SL-1jp (Create review-comments.js) CLOSED
+└── Task: SL-5bk (Simplify AGENTS.md) CLOSED
 ```
 
 ## Phase Summary
 
 | Phase | Feature ID | Description | Tasks | Status |
 |-------|------------|-------------|-------|--------|
-| Setup | SL-if7 | Path Standardization | 5 | CLOSED |
-| US1 (P1) | SL-96v | Help Command | 1 | CLOSED |
-| US2 (P1) | SL-ky5 | Audit Command | 1 | CLOSED |
-| US3 (P2) | SL-2x9 | Revise Command | 1 | CLOSED |
-| US4 (P2) | SL-mye | Implement Sync | 1 | CLOSED |
-| US5 (P3) | SL-7o3 | Adopt from Audit | 1 | CLOSED |
-| Enhanced | SL-6t7 | Purpose Sections | 1 | CLOSED |
-| Scripts | SL-4v4 | Utility Scripts | 2 | CLOSED |
+| Setup | SL-55w | Path Standardization | 5 | CLOSED |
+| US1 (P1) | SL-9i4 | Help Command | 1 | CLOSED |
+| US2 (P1) | SL-qoo | Audit Command | 1 | CLOSED |
+| US3 (P2) | SL-32j | Revise Command | 1 | CLOSED |
+| US4 (P2) | SL-as7 | Implement Sync | 1 | CLOSED |
+| US5 (P3) | SL-cu9 | Adopt from Audit | 1 | CLOSED |
+| Enhanced | SL-wsx | Purpose Sections | 1 | CLOSED |
+| Scripts | SL-ovf | Utility Scripts | 2 | CLOSED |
 
 ## User Story Mapping
 
 | Story | Priority | Feature ID | Requirements | Status |
 |-------|----------|------------|--------------|--------|
-| US1: Help Command | P1 | SL-96v | FR-001 | CLOSED |
-| US2: Audit Command | P1 | SL-ky5 | FR-002 | CLOSED |
-| US3: Revise Command | P2 | SL-2x9 | FR-003 | CLOSED |
-| US4: Implement Sync | P2 | SL-mye | FR-004 | CLOSED |
-| US5: Adopt from Audit | P3 | SL-7o3 | FR-005 | CLOSED |
+| US1: Help Command | P1 | SL-9i4 | FR-001 | CLOSED |
+| US2: Audit Command | P1 | SL-qoo | FR-002 | CLOSED |
+| US3: Revise Command | P2 | SL-32j | FR-003 | CLOSED |
+| US4: Implement Sync | P2 | SL-as7 | FR-004 | CLOSED |
+| US5: Adopt from Audit | P3 | SL-cu9 | FR-005 | CLOSED |
 
 ## Implementation Statistics
 
