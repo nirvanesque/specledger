@@ -137,14 +137,34 @@ sl deps resolve
 
 ### Dependencies
 
+Dependencies allow you to reference external specifications from other teams or projects. When you add a dependency, SpecLedger automatically downloads and caches the specifications for offline use and AI reference.
+
 | Command | Description |
 |---------|-------------|
 | `sl deps list` | List all dependencies |
-| `sl deps add <url>` | Add a dependency |
-| `sl deps add <url> --alias <name>` | Add with alias for AI import paths |
+| `sl deps add <url>` | Add a dependency (auto-detects SpecLedger repos) |
+| `sl deps add <url> --alias <name>` | Add with alias for AI reference paths |
+| `sl deps add <url> --artifact-path <path>` | Add with manual artifact path for non-SpecLedger repos |
+| `sl deps add <url> --alias <name> --link` | Add and create symlink for Claude Code |
 | `sl deps remove <url>` | Remove a dependency |
 | `sl deps resolve` | Download and cache dependencies |
+| `sl deps resolve --link` | Resolve and create symlinks for Claude Code |
 | `sl deps update` | Update dependencies to latest versions |
+| `sl deps link` | Manually create symlinks for all dependencies |
+| `sl deps unlink [alias]` | Remove symlinks for dependencies |
+
+**Artifact Path**: For SpecLedger repositories, the `artifact_path` is auto-detected from the dependency's `specledger.yaml`. For non-SpecLedger repositories, use `--artifact-path` to specify where specifications are located (e.g., `docs/openapi/`).
+
+**Reference Format**: Dependencies can be referenced using the `alias:artifact` syntax in specifications. For example, if you add a dependency with `--alias api`, you can reference its artifacts as `api:spec.md` or `api:contracts/user-api.proto`.
+
+**Linking Dependencies**: To make dependency files available for Claude Code, use the `--link` flag when adding or resolving dependencies:
+```bash
+sl deps add git@github.com:org/specs --alias specs --link
+sl deps resolve --link
+```
+Or manually link all dependencies: `sl deps link`
+
+**Unlinking**: Use `sl deps unlink [alias]` to remove symlinks. Useful for cleaning up or re-linking dependencies.
 
 ### Workflows
 

@@ -2,7 +2,10 @@ package metadata
 
 import (
 	"errors"
+	"fmt"
+	"path/filepath"
 	"regexp"
+	"strings"
 	"time"
 )
 
@@ -12,6 +15,7 @@ type ProjectMetadata struct {
 	Project      ProjectInfo     `yaml:"project"`
 	Playbook     PlaybookInfo    `yaml:"playbook"`
 	TaskTracker  TaskTrackerInfo `yaml:"task_tracker,omitempty"`
+	ArtifactPath string          `yaml:"artifact_path,omitempty"` // Path to artifacts directory
 	Dependencies []Dependency    `yaml:"dependencies,omitempty"`
 }
 
@@ -66,8 +70,8 @@ const (
 type Dependency struct {
 	URL            string          `yaml:"url"`
 	Branch         string          `yaml:"branch,omitempty"`
-	Path           string          `yaml:"path,omitempty"`
 	Alias          string          `yaml:"alias,omitempty"`
+	ArtifactPath   string          `yaml:"artifact_path,omitempty"` // Path to artifacts within dependency repo
 	ResolvedCommit string          `yaml:"resolved_commit,omitempty"`
 	Framework      FrameworkChoice `yaml:"framework,omitempty"`   // speckit, openspec, both, none
 	ImportPath     string          `yaml:"import_path,omitempty"` // @alias/spec format for AI imports
@@ -133,6 +137,14 @@ func ValidateGitURL(url string) error {
 	return errors.New("url must be valid git SSH, HTTPS URL, or local file path")
 }
 
+// GetArtifactPath returns the artifact path, with default fallback
+func (m *ProjectMetadata) GetArtifactPath() string {
+	if m.ArtifactPath != "" {
+		return m.ArtifactPath
+	}
+	return "specledger/"
+}
+
 // ValidateCommitSHA validates commit SHA format (40-character hex)
 func ValidateCommitSHA(sha string) error {
 	if len(sha) != 40 {
@@ -141,6 +153,41 @@ func ValidateCommitSHA(sha string) error {
 	if !regexp.MustCompile(`^[a-f0-9]+$`).MatchString(sha) {
 		return errors.New("commit SHA must contain only hexadecimal characters")
 	}
+	return nil
+}
+
+// ValidateArtifactPath validates artifact path format (relative, no parent directory references)
+func ValidateArtifactPath(path string) error {
+	if path == "" {
+		return nil // empty is valid (will use default)
+	}
+
+	// Trim whitespace
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return errors.New("artifact_path cannot be only whitespace")
+	}
+
+	// Must be relative (not absolute)
+	if filepath.IsAbs(path) {
+		return errors.New("artifact_path must be a relative path, not absolute")
+	}
+
+	// Must not contain parent directory references for security
+	if strings.Contains(path, "..") {
+		return errors.New("artifact_path must not contain parent directory references (..)")
+	}
+
+	// Must not start with a slash (already caught by IsAbs, but being explicit)
+	if strings.HasPrefix(path, "/") {
+		return errors.New("artifact_path must not start with /")
+	}
+
+	// Check for invalid characters (basic check)
+	if regexp.MustCompile(`[<>:"|?*\x00-\x1f]`).MatchString(path) {
+		return errors.New("artifact_path contains invalid characters")
+	}
+
 	return nil
 }
 
@@ -167,14 +214,23 @@ func (m *ProjectMetadata) Validate() error {
 		return errors.New("playbook name is required")
 	}
 
+	// Validate artifact_path if present
+	if err := ValidateArtifactPath(m.ArtifactPath); err != nil {
+		return err
+	}
+
 	for i, dep := range m.Dependencies {
 		if err := ValidateGitURL(dep.URL); err != nil {
-			return errors.New("dependency " + string(rune(i)) + ": " + err.Error())
+			return fmt.Errorf("dependency %d: %w", i, err)
 		}
 		if dep.ResolvedCommit != "" {
 			if err := ValidateCommitSHA(dep.ResolvedCommit); err != nil {
-				return errors.New("dependency " + string(rune(i)) + ": " + err.Error())
+				return fmt.Errorf("dependency %d: %w", i, err)
 			}
+		}
+		// Validate artifact_path if present
+		if err := ValidateArtifactPath(dep.ArtifactPath); err != nil {
+			return fmt.Errorf("dependency %d (%s): %w", i, dep.URL, err)
 		}
 	}
 

@@ -10,6 +10,7 @@ import (
 	"github.com/specledger/specledger/pkg/cli/framework"
 	"github.com/specledger/specledger/pkg/cli/metadata"
 	"github.com/specledger/specledger/pkg/cli/ui"
+	"github.com/specledger/specledger/pkg/deps"
 	"github.com/spf13/cobra"
 )
 
@@ -29,12 +30,16 @@ Examples:
 
 // VarAddCmd represents the add command
 var VarAddCmd = &cobra.Command{
-	Use:   "add <repo-url> [branch] [spec-path]",
+	Use:   "add <repo-url> [branch] --alias <name> [--artifact-path <path>]",
 	Short: "Add a dependency",
-	Long:  `Add an external specification dependency to your project. The dependency will be tracked in specledger.yaml and cached locally for offline use.`,
-	Example: `  sl deps add git@github.com:org/api-spec
-  sl deps add git@github.com:org/api-spec v1.0 github.com/specledger/specledger/api.md
-  sl deps add git@github.com:org/api-spec main spec.md --alias api`,
+	Long: `Add an external specification dependency to your project. The dependency will be tracked in specledger.yaml and cached locally for offline use.
+
+The --alias flag is required and will be used as the reference path when accessing artifacts from this dependency.
+
+For SpecLedger repositories, the artifact_path will be auto-detected from the dependency's specledger.yaml. For non-SpecLedger repositories, use --artifact-path to manually specify where artifacts are located.`,
+	Example: `  sl deps add git@github.com:org/api-spec --alias api
+  sl deps add git@github.com:org/api-spec develop --alias api
+  sl deps add https://github.com/org/api-docs --alias docs --artifact-path docs/openapi/`,
 	Args: cobra.MinimumNArgs(1),
 	RunE: runAddDependency,
 }
@@ -77,11 +82,42 @@ var VarDepsUpdateCmd = &cobra.Command{
 	RunE: runUpdateDependencies,
 }
 
-func init() {
-	VarDepsCmd.AddCommand(VarAddCmd, VarDepsListCmd, VarResolveCmd, VarDepsUpdateCmd, VarRemoveCmd)
+// VarLinkCmd represents the link command
+var VarLinkCmd = &cobra.Command{
+	Use:   "link",
+	Short: "Create symlinks from cached dependencies to project artifacts directory",
+	Long: `Create symlinks from cached dependencies to the project's artifacts directory, making them available for Claude Code and other tools.
 
-	VarAddCmd.Flags().StringP("alias", "a", "", "Optional alias for the dependency")
+This command creates symlinks from ~/.specledger/cache/<alias>/ to <project.artifact_path>/deps/<alias>/, allowing reference paths like "alias:artifact.md" to resolve to actual files.
+
+Example:  sl deps link`,
+	RunE: runLinkDependencies,
+}
+
+// VarUnlinkCmd represents the unlink command
+var VarUnlinkCmd = &cobra.Command{
+	Use:   "unlink [alias]",
+	Short: "Remove symlinks for dependencies",
+	Long: `Remove symlinks for dependencies from the project's artifacts directory.
+
+If no alias is specified, removes all dependency symlinks. If an alias is specified, only removes that dependency's symlink.
+
+Example:  sl deps unlink      # Unlink all
+  sl deps unlink api    # Unlink specific dependency`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: runUnlinkDependencies,
+}
+
+func init() {
+	VarDepsCmd.AddCommand(VarAddCmd, VarDepsListCmd, VarResolveCmd, VarDepsUpdateCmd, VarLinkCmd, VarUnlinkCmd, VarRemoveCmd)
+
+	VarAddCmd.Flags().StringP("alias", "a", "", "Required alias for the dependency (used as reference path)")
+	_ = VarAddCmd.MarkFlagRequired("alias")
+	VarAddCmd.Flags().String("artifact-path", "", "Path to artifacts within dependency repository (auto-detected for SpecLedger repos)")
+	VarAddCmd.Flags().Bool("link", false, "Create symlinks after adding dependency")
+
 	VarResolveCmd.Flags().BoolP("no-cache", "n", false, "Ignore cached specifications")
+	VarResolveCmd.Flags().Bool("link", false, "Create symlinks after resolving dependencies")
 }
 
 func runAddDependency(cmd *cobra.Command, args []string) error {
@@ -99,22 +135,26 @@ func runAddDependency(cmd *cobra.Command, args []string) error {
 
 	// Extract flags
 	alias, _ := cmd.Flags().GetString("alias")
+	artifactPath, _ := cmd.Flags().GetString("artifact-path")
 
 	// Parse arguments
 	repoURL := args[0]
 	branch := "main" // default
-	specPath := "spec.md"
 
 	if len(args) >= 2 {
 		branch = args[1]
-	}
-	if len(args) >= 3 {
-		specPath = args[2]
 	}
 
 	// Validate URL
 	if !isValidGitURL(repoURL) {
 		return fmt.Errorf("invalid repository URL: %s", repoURL)
+	}
+
+	// Validate artifact_path if provided
+	if artifactPath != "" {
+		if err := metadata.ValidateArtifactPath(artifactPath); err != nil {
+			return fmt.Errorf("invalid artifact-path: %w", err)
+		}
 	}
 
 	// Detect framework type
@@ -143,13 +183,37 @@ func runAddDependency(cmd *cobra.Command, args []string) error {
 	fmt.Printf("  Framework:  %s\n", frameworkDisplay)
 	fmt.Println()
 
+	// Auto-detect artifact_path if not manually specified and framework detected
+	if artifactPath == "" && frameworkType != metadata.FrameworkNone {
+		ui.PrintSection("Detecting Artifact Path")
+		fmt.Printf("Checking %s for specledger.yaml...\n", ui.Bold(repoURL))
+
+		// Create temporary directory for detection
+		tempDir := filepath.Join(os.TempDir(), "specledger-detect-"+alias)
+		defer os.RemoveAll(tempDir) // Clean up after detection
+
+		detectedPath, err := deps.DetectArtifactPathFromRemote(repoURL, branch, tempDir)
+		if err != nil {
+			ui.PrintWarning(fmt.Sprintf("Could not auto-detect artifact_path: %v", err))
+			ui.PrintWarning("This may not be a SpecLedger repository.")
+			ui.PrintWarning("Use --artifact-path to specify manually.")
+			fmt.Println()
+		} else {
+			artifactPath = detectedPath
+			fmt.Printf("  Found: %s\n", ui.Cyan(artifactPath))
+			fmt.Println()
+		}
+	} else if artifactPath == "" {
+		return fmt.Errorf("artifact_path must be specified for non-SpecLedger repositories (use --artifact-path <path>)")
+	}
+
 	// Create dependency
 	dep := metadata.Dependency{
-		URL:       repoURL,
-		Branch:    branch,
-		Path:      specPath,
-		Alias:     alias,
-		Framework: frameworkType,
+		URL:          repoURL,
+		Branch:       branch,
+		Alias:        alias,
+		ArtifactPath: artifactPath,
+		Framework:    frameworkType,
 	}
 
 	// Generate import path for AI context
@@ -161,12 +225,13 @@ func runAddDependency(cmd *cobra.Command, args []string) error {
 		if existing.URL == repoURL {
 			return fmt.Errorf("dependency already exists: %s", repoURL)
 		}
-		if alias != "" && existing.Alias == alias {
+		if existing.Alias == alias {
 			return fmt.Errorf("alias already exists: %s", alias)
 		}
 	}
 
 	// Add dependency
+	dependencyIndex := len(meta.Dependencies)
 	meta.Dependencies = append(meta.Dependencies, dep)
 
 	// Save metadata
@@ -174,18 +239,57 @@ func runAddDependency(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to save metadata: %w", err)
 	}
 
+	// Auto-download the dependency
+	ui.PrintSection("Downloading Dependency")
+	dirName := alias
+	homeDir, _ := os.UserHomeDir()
+	cacheDir := filepath.Join(homeDir, ".specledger", "cache", dirName)
+
+	fmt.Printf("Cache: %s\n", ui.Cyan(cacheDir))
+	fmt.Printf("Status: %s...\n", ui.Yellow("cloning"))
+
+	if err := cloneOrUpdateRepository(dep, cacheDir); err != nil {
+		ui.PrintWarning(fmt.Sprintf("Failed to clone repository: %v", err))
+		ui.PrintWarning("Dependency was added but not downloaded. Run 'sl deps resolve' to retry.")
+		fmt.Println()
+		return nil
+	}
+
+	// Resolve current commit SHA
+	gitCmd := exec.Command("git", "-C", cacheDir, "rev-parse", "HEAD")
+	output, err := gitCmd.CombinedOutput()
+	if err != nil {
+		ui.PrintWarning(fmt.Sprintf("Failed to resolve commit: %v", err))
+	} else {
+		commitSHA := strings.TrimSpace(string(output))
+		meta.Dependencies[dependencyIndex].ResolvedCommit = commitSHA
+		// Save updated metadata with commit SHA
+		if err := metadata.SaveToProject(meta, projectDir); err != nil {
+			ui.PrintWarning(fmt.Sprintf("Failed to save commit SHA: %v", err))
+		}
+		fmt.Printf("Status: %s %s\n", ui.Green("✓"), ui.Gray(commitSHA[:8]))
+	}
+	fmt.Println()
+
 	ui.PrintSuccess("Dependency added")
 	fmt.Printf("  Repository:  %s\n", ui.Bold(repoURL))
-	if alias != "" {
-		fmt.Printf("  Alias:       %s\n", ui.Bold(alias))
-	}
+	fmt.Printf("  Alias:       %s\n", ui.Bold(alias))
 	fmt.Printf("  Branch:      %s\n", ui.Bold(branch))
-	fmt.Printf("  Path:        %s\n", ui.Bold(specPath))
+	if dep.ArtifactPath != "" {
+		fmt.Printf("  Artifact Path: %s\n", ui.Bold(dep.ArtifactPath))
+	}
 	fmt.Printf("  Framework:   %s\n", frameworkDisplay)
 	fmt.Printf("  Import Path: %s\n", ui.Cyan(importPath))
 	fmt.Println()
-	fmt.Printf("Next: %s\n", ui.Cyan("sl deps resolve"))
-	fmt.Println()
+
+	// Auto-link the dependency if --link flag is set
+	linkFlag, _ := cmd.Flags().GetBool("link")
+	if linkFlag {
+		if err := linkDependency(projectDir, meta, dep); err != nil {
+			ui.PrintWarning(fmt.Sprintf("Failed to create symlink: %v", err))
+			ui.PrintWarning("Dependency was added but not linked. Run 'sl deps link' to manually link.")
+		}
+	}
 
 	return nil
 }
@@ -219,11 +323,11 @@ func runListDependencies(cmd *cobra.Command, args []string) error {
 		if dep.Branch != "" && dep.Branch != "main" {
 			fmt.Printf("   Branch:  %s\n", ui.Cyan(dep.Branch))
 		}
-		if dep.Path != "" && dep.Path != "spec.md" {
-			fmt.Printf("   Path:    %s\n", ui.Cyan(dep.Path))
-		}
 		if dep.Alias != "" {
 			fmt.Printf("   Alias:   %s\n", ui.Cyan(dep.Alias))
+		}
+		if dep.ArtifactPath != "" {
+			fmt.Printf("   Artifact Path: %s\n", ui.Cyan(dep.ArtifactPath))
 		}
 		if dep.Framework != "" && dep.Framework != metadata.FrameworkNone {
 			frameworkDisplay := string(dep.Framework)
@@ -391,6 +495,28 @@ func runResolveDependencies(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Println()
 
+	// Link all resolved dependencies if --link flag is set
+	linkFlag, _ := cmd.Flags().GetBool("link")
+	if linkFlag && resolvedCount > 0 {
+		ui.PrintSection("Linking Dependencies")
+		linkedCount := 0
+		for _, dep := range meta.Dependencies {
+			if dep.ResolvedCommit == "" {
+				continue // Skip unresolved dependencies
+			}
+			if err := linkDependency(projectDir, meta, dep); err != nil {
+				ui.PrintWarning(fmt.Sprintf("Failed to link %s: %v", dep.Alias, err))
+			} else {
+				linkedCount++
+			}
+		}
+		if linkedCount > 0 {
+			ui.PrintSuccess(fmt.Sprintf("Linked %d dependencies", linkedCount))
+			fmt.Printf("  Dependencies are now available at: %s/deps/<alias>/\n", meta.GetArtifactPath())
+		}
+		fmt.Println()
+	}
+
 	return nil
 }
 
@@ -398,42 +524,31 @@ func runResolveDependencies(cmd *cobra.Command, args []string) error {
 func cloneOrUpdateRepository(dep metadata.Dependency, targetDir string) error {
 	// Check if directory already exists
 	if _, err := os.Stat(targetDir); os.IsNotExist(err) {
-		// Clone the repository
-		args := []string{"clone", dep.URL, targetDir}
-		if dep.Branch != "" && dep.Branch != "main" {
-			args = append(args, "--branch", dep.Branch)
+		// Clone the repository using go-git/v5
+		cloneOpts := deps.CloneOptions{
+			URL:       dep.URL,
+			Branch:    dep.Branch,
+			TargetDir: targetDir,
+			Shallow:   false, // Do full clone for easier updates
 		}
 
-		cmd := exec.Command("git", args...)
-		cmd.Stdout = nil
-		cmd.Stderr = nil
-		if err := cmd.Run(); err != nil {
+		_, _, err := deps.Clone(cloneOpts)
+		if err != nil {
 			return fmt.Errorf("git clone failed: %w", err)
 		}
 	} else {
-		// Repository exists, fetch and pull updates
-		// Fetch latest changes
-		cmd := exec.Command("git", "-C", targetDir, "fetch", "origin")
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("git fetch failed: %w", err)
-		}
-
-		// Checkout the specified branch
-		branch := dep.Branch
-		if branch == "" {
-			branch = "main"
-		}
-
-		cmd = exec.Command("git", "-C", targetDir, "checkout", branch)
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("git checkout failed: %w", err)
+		// Repository exists, open and update it
+		repo, err := deps.OpenRepository(targetDir)
+		if err != nil {
+			return fmt.Errorf("failed to open repository: %w", err)
 		}
 
 		// Pull latest changes
-		cmd = exec.Command("git", "-C", targetDir, "pull", "origin", branch)
-		cmd.Stdout = nil
-		cmd.Stderr = nil
-		_ = cmd.Run() // Pull might fail if no tracking branch, ignore for read-only access
+		_, err = deps.Pull(repo, dep.Branch)
+		if err != nil {
+			// Pull might fail if no tracking branch, that's okay for read-only access
+			return fmt.Errorf("git pull failed: %w", err)
+		}
 	}
 
 	return nil
@@ -475,17 +590,277 @@ func runUpdateDependencies(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Checking %s dependencies for updates...\n", ui.Bold(fmt.Sprintf("%d", len(meta.Dependencies))))
 	fmt.Println()
 
-	for _, dep := range meta.Dependencies {
-		// TODO: Implement actual update checking
-		if dep.ResolvedCommit != "" {
-			fmt.Printf("  %s: at %s\n", ui.Bold(dep.URL), ui.Gray(dep.ResolvedCommit[:8]))
-		} else {
-			fmt.Printf("  %s: %s\n", ui.Bold(dep.URL), ui.Yellow("not resolved yet"))
+	updatesAvailable := 0
+
+	for i, dep := range meta.Dependencies {
+		// Filter to specific dependency if URL provided
+		if len(args) > 0 && dep.URL != args[0] && dep.Alias != args[0] {
+			continue
 		}
+
+		fmt.Printf("%s. %s\n", ui.Bold(fmt.Sprintf("%d", i+1)), ui.Bold(dep.URL))
+		if dep.Alias != "" {
+			fmt.Printf("   Alias:  %s\n", ui.Cyan(dep.Alias))
+		}
+
+		// Get cache directory for this dependency
+		dirName := dep.Alias
+		if dirName == "" {
+			dirName = generateDirName(dep.URL)
+		}
+		homeDir, _ := os.UserHomeDir()
+		cacheDir := filepath.Join(homeDir, ".specledger", "cache", dirName)
+
+		// If dependency hasn't been resolved yet, skip
+		if dep.ResolvedCommit == "" {
+			fmt.Printf("   Status: %s\n", ui.Yellow("not resolved yet (run 'sl deps resolve' first)"))
+			fmt.Println()
+			continue
+		}
+
+		// Fetch latest changes from remote
+		fmt.Printf("   Current: %s\n", ui.Gray(dep.ResolvedCommit[:8]))
+		fmt.Printf("   Checking: %s...\n", ui.Yellow("fetching latest"))
+
+		// Open the repository
+		repo, err := deps.OpenRepository(cacheDir)
+		if err != nil {
+			ui.PrintWarning(fmt.Sprintf("Failed to open repository: %v", err))
+			fmt.Println()
+			continue
+		}
+
+		// Get the latest commit from remote
+		latestCommit, err := deps.ResolveRemoteCommit(repo, dep.Branch)
+		if err != nil {
+			ui.PrintWarning(fmt.Sprintf("Failed to get remote commit: %v", err))
+			fmt.Println()
+			continue
+		}
+
+		// Compare with current resolved commit
+		if latestCommit == dep.ResolvedCommit {
+			fmt.Printf("   Status: %s\n", ui.Green("already up to date"))
+			fmt.Println()
+			continue
+		}
+
+		// Update available
+		updatesAvailable++
+		fmt.Printf("   Latest:  %s\n", ui.Green(latestCommit[:8]))
+
+		// Show commit log between current and latest
+		commits, err := deps.Log(repo, dep.ResolvedCommit, latestCommit, 5)
+		if err == nil && commits != "" {
+			lines := strings.Split(commits, "\n")
+			fmt.Printf("   Changes:\n")
+			for _, line := range lines {
+				fmt.Printf("     %s\n", line)
+			}
+		}
+
+		// Prompt for update (or auto-apply if --yes flag exists)
+		// For now, automatically apply updates
+		fmt.Printf("   Status: %s\n", ui.Yellow("updating"))
+
+		// Checkout the latest commit
+		if err := deps.Checkout(repo, latestCommit); err != nil {
+			ui.PrintWarning(fmt.Sprintf("Failed to checkout latest commit: %v", err))
+			fmt.Println()
+			continue
+		}
+
+		// Update the resolved commit in metadata
+		meta.Dependencies[i].ResolvedCommit = latestCommit
+
+		fmt.Printf("   Status: %s\n", ui.Green("updated"))
+		fmt.Println()
+	}
+
+	// Save updated metadata
+	if updatesAvailable > 0 {
+		if err := metadata.SaveToProject(meta, projectDir); err != nil {
+			return fmt.Errorf("failed to save metadata: %w", err)
+		}
+
+		ui.PrintSuccess(fmt.Sprintf("Updated %d dependencies", updatesAvailable))
+	} else {
+		ui.PrintSuccess("All dependencies are up to date")
 	}
 	fmt.Println()
-	ui.PrintWarning("Dependency updates not yet implemented")
+
+	return nil
+}
+
+func runLinkDependencies(cmd *cobra.Command, args []string) error {
+	projectDir, err := findProjectRoot()
+	if err != nil {
+		return fmt.Errorf("failed to find project root: %w", err)
+	}
+
+	meta, err := metadata.LoadFromProject(projectDir)
+	if err != nil {
+		return fmt.Errorf("failed to load metadata: %w", err)
+	}
+
+	if len(meta.Dependencies) == 0 {
+		return fmt.Errorf("no dependencies to link")
+	}
+
+	// Get project's artifact path
+	projectArtifactPath := meta.GetArtifactPath()
+	if projectArtifactPath == "" {
+		return fmt.Errorf("project artifact_path is not set in specledger.yaml")
+	}
+
+	ui.PrintSection("Linking Dependencies")
+	fmt.Printf("Creating symlinks from cache to %s/deps/\n", ui.Bold(projectArtifactPath))
 	fmt.Println()
+
+	homeDir, _ := os.UserHomeDir()
+	linkedCount := 0
+
+	for _, dep := range meta.Dependencies {
+		if dep.Alias == "" {
+			continue
+		}
+
+		// Get cache directory
+		cacheDir := filepath.Join(homeDir, ".specledger", "cache", dep.Alias)
+
+		// Check if dependency is cached
+		if _, err := os.Stat(cacheDir); os.IsNotExist(err) {
+			ui.PrintWarning(fmt.Sprintf("Dependency %s is not cached (run 'sl deps resolve' first)", dep.Alias))
+			continue
+		}
+
+		// Get dependency's artifact path
+		depArtifactPath := dep.ArtifactPath
+		if depArtifactPath == "" {
+			ui.PrintWarning(fmt.Sprintf("Dependency %s has no artifact_path", dep.Alias))
+			continue
+		}
+
+		// Source: cache_dir/dep_artifact_path
+		sourceDir := filepath.Join(cacheDir, depArtifactPath)
+
+		// Check if source exists
+		if _, err := os.Stat(sourceDir); os.IsNotExist(err) {
+			ui.PrintWarning(fmt.Sprintf("Artifact path not found in cache: %s", sourceDir))
+			continue
+		}
+
+		// Target: project_dir/project_artifact_path/deps/alias
+		targetDir := filepath.Join(projectDir, projectArtifactPath, "deps", dep.Alias)
+
+		// Create parent directory if it doesn't exist
+		if err := os.MkdirAll(filepath.Dir(targetDir), 0755); err != nil {
+			ui.PrintWarning(fmt.Sprintf("Failed to create parent directory: %v", err))
+			continue
+		}
+
+		// Remove existing symlink or directory
+		if _, err := os.Lstat(targetDir); err == nil {
+			os.RemoveAll(targetDir)
+		}
+
+		// Create symlink
+		if err := os.Symlink(sourceDir, targetDir); err != nil {
+			ui.PrintWarning(fmt.Sprintf("Failed to create symlink for %s: %v", dep.Alias, err))
+			continue
+		}
+
+		fmt.Printf("  %s -> %s\n", ui.Cyan(dep.Alias), ui.Gray(sourceDir))
+		linkedCount++
+	}
+
+	fmt.Println()
+	if linkedCount > 0 {
+		ui.PrintSuccess(fmt.Sprintf("Linked %d dependencies", linkedCount))
+		fmt.Println()
+		fmt.Println("Dependencies are now available at:")
+		fmt.Printf("  %s/deps/<alias>/\n", projectArtifactPath)
+	} else {
+		ui.PrintWarning("No dependencies were linked")
+	}
+	fmt.Println()
+
+	return nil
+}
+
+// linkDependency creates a symlink for a single dependency
+// This is called automatically after adding or resolving dependencies
+func linkDependency(projectDir string, meta *metadata.ProjectMetadata, dep metadata.Dependency) error {
+	// Skip if alias or artifact_path is empty
+	if dep.Alias == "" {
+		return nil // Skip silently
+	}
+	if dep.ArtifactPath == "" {
+		return fmt.Errorf("dependency has no artifact_path")
+	}
+
+	// Get project's artifact path
+	projectArtifactPath := meta.GetArtifactPath()
+	if projectArtifactPath == "" {
+		return fmt.Errorf("project artifact_path is not set")
+	}
+
+	homeDir, _ := os.UserHomeDir()
+
+	// Get cache directory
+	cacheDir := filepath.Join(homeDir, ".specledger", "cache", dep.Alias)
+
+	// Check if dependency is cached
+	if _, err := os.Stat(cacheDir); os.IsNotExist(err) {
+		return fmt.Errorf("dependency is not cached")
+	}
+
+	// Source: cache_dir/dep_artifact_path
+	sourceDir := filepath.Join(cacheDir, dep.ArtifactPath)
+
+	// Check if source exists
+	if _, err := os.Stat(sourceDir); os.IsNotExist(err) {
+		return fmt.Errorf("artifact path not found in cache: %s", sourceDir)
+	}
+
+	// Target: project_dir/project_artifact_path/deps/alias
+	targetDir := filepath.Join(projectDir, projectArtifactPath, "deps", dep.Alias)
+
+	// Create parent directory if it doesn't exist
+	if err := os.MkdirAll(filepath.Dir(targetDir), 0755); err != nil {
+		return fmt.Errorf("failed to create parent directory: %w", err)
+	}
+
+	// Check if target already exists
+	targetInfo, err := os.Lstat(targetDir)
+	if err == nil {
+		// Target exists - check if it's a symlink
+		if targetInfo.Mode()&os.ModeSymlink != 0 {
+			// It's a symlink, check if it points to the right place
+			existingTarget, _ := os.Readlink(targetDir)
+			if existingTarget == sourceDir {
+				// Already pointing to the right place, skip
+				return nil
+			}
+			// Pointing elsewhere, remove and recreate
+			os.Remove(targetDir)
+		} else {
+			// It's a real directory or file - don't delete user data!
+			// Check if it's empty
+			entries, _ := os.ReadDir(targetDir)
+			if len(entries) > 0 {
+				// Directory has content, skip to avoid data loss
+				return fmt.Errorf("target directory exists and is not empty: %s", targetDir)
+			}
+			// Empty directory, safe to remove
+			os.Remove(targetDir)
+		}
+	}
+
+	// Create symlink
+	if err := os.Symlink(sourceDir, targetDir); err != nil {
+		return fmt.Errorf("failed to create symlink: %w", err)
+	}
 
 	return nil
 }
@@ -498,6 +873,88 @@ func isValidGitURL(s string) bool {
 		strings.HasPrefix(s, "/") || // Local absolute path
 		strings.HasPrefix(s, "./") || // Local relative path
 		strings.HasPrefix(s, "../"))
+}
+
+func runUnlinkDependencies(cmd *cobra.Command, args []string) error {
+	projectDir, err := findProjectRoot()
+	if err != nil {
+		return fmt.Errorf("failed to find project root: %w", err)
+	}
+
+	meta, err := metadata.LoadFromProject(projectDir)
+	if err != nil {
+		return fmt.Errorf("failed to load metadata: %w", err)
+	}
+
+	if len(meta.Dependencies) == 0 {
+		return fmt.Errorf("no dependencies to unlink")
+	}
+
+	// Get project's artifact path
+	projectArtifactPath := meta.GetArtifactPath()
+	if projectArtifactPath == "" {
+		return fmt.Errorf("project artifact_path is not set in specledger.yaml")
+	}
+
+	// Determine which dependencies to unlink
+	targetAlias := ""
+	if len(args) > 0 {
+		targetAlias = args[0]
+	}
+
+	ui.PrintSection("Unlinking Dependencies")
+
+	unlinkedCount := 0
+	for _, dep := range meta.Dependencies {
+		// Skip if targeting specific alias and this doesn't match
+		if targetAlias != "" && dep.Alias != targetAlias {
+			continue
+		}
+
+		if dep.Alias == "" {
+			continue
+		}
+
+		// Target: project_dir/project_artifact_path/deps/alias
+		targetDir := filepath.Join(projectDir, projectArtifactPath, "deps", dep.Alias)
+
+		// Check if target exists
+		targetInfo, err := os.Lstat(targetDir)
+		if err != nil {
+			// Doesn't exist, skip
+			continue
+		}
+
+		// Only remove symlinks, not real directories
+		if targetInfo.Mode()&os.ModeSymlink != 0 {
+			if err := os.Remove(targetDir); err != nil {
+				ui.PrintWarning(fmt.Sprintf("Failed to unlink %s: %v", dep.Alias, err))
+			} else {
+				fmt.Printf("  Removed: %s\n", ui.Cyan(dep.Alias))
+				unlinkedCount++
+			}
+		} else {
+			ui.PrintWarning(fmt.Sprintf("Skipping %s: not a symlink (real directory)", dep.Alias))
+		}
+	}
+
+	fmt.Println()
+	if targetAlias != "" {
+		if unlinkedCount > 0 {
+			ui.PrintSuccess(fmt.Sprintf("Unlinked dependency: %s", targetAlias))
+		} else {
+			ui.PrintWarning(fmt.Sprintf("Dependency %s was not linked", targetAlias))
+		}
+	} else {
+		if unlinkedCount > 0 {
+			ui.PrintSuccess(fmt.Sprintf("Unlinked %d dependencies", unlinkedCount))
+		} else {
+			ui.PrintWarning("No dependencies were linked")
+		}
+	}
+	fmt.Println()
+
+	return nil
 }
 
 func findProjectRoot() (string, error) {
