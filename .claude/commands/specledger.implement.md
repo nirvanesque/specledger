@@ -10,11 +10,55 @@ $ARGUMENTS
 
 You **MUST** consider the user input before proceeding (if not empty).
 
+## Purpose
+
+Execute the implementation plan by processing all tasks in tasks.md (Beads). This command orchestrates the actual coding work following the defined task order and dependencies.
+
+**When to use**: After `/specledger.tasks` generates the task list.
+
 ## Outline
 
-1. Run `.specledger/scripts/bash/check-prerequisites.sh --json --require-tasks --include-tasks` from repo root and parse FEATURE_DIR and AVAILABLE_DOCS list. All paths must be absolute. For single quotes in args like "I'm Groot", use escape syntax: e.g 'I'\''m Groot' (or double-quote if possible: "I'm Groot").
+1. **Sync issues before starting** (required):
 
-2. **Check checklists status** (if FEATURE_DIR/checklists/ exists):
+   **Option A: Git-based sync (team already pushed latest JSONL):**
+   ```bash
+   git pull --rebase origin $(git branch --show-current)
+   bd sync --import --rename-on-import
+   bd ready
+   ```
+
+   **Option B: Supabase sync (fetch fresh data from server):**
+
+   ```bash
+   # Detect repo info
+   remoteUrl=$(git remote get-url origin)
+   if [[ "$remoteUrl" =~ github\.com[:/]([^/]+)/([^/.]+) ]]; then
+       repoOwner="${BASH_REMATCH[1]}"
+       repoName="${BASH_REMATCH[2]%.git}"
+   fi
+
+   # Pull from Supabase (requires Node.js)
+   node scripts/pull-issues.js --repo-owner "$repoOwner" --repo-name "$repoName"
+
+   # Import to database
+   bd sync --import --rename-on-import
+   bd ready
+   ```
+
+   **When to use which:**
+   - **Option A** (recommended): Git-based sync - no dependencies, team already pushed JSONL
+   - **Option B**: Supabase direct sync - requires Node.js, fetches fresh data from server
+
+   **Error handling:**
+   - If merge conflict in `.beads/issues.jsonl` → run `bd sync --resolve`
+   - If `bd sync --import` fails → check `.beads/issues.jsonl` format
+   - If script fails → check `sl auth status` and credentials
+
+   This ensures you see latest issue status from other team members and prevents working on issues already claimed by others
+
+2. Run `.specledger/scripts/bash/check-prerequisites.sh --json --require-tasks --include-tasks` from repo root and parse FEATURE_DIR and AVAILABLE_DOCS list. All paths must be absolute. For single quotes in args like "I'm Groot", use escape syntax: e.g 'I'\''m Groot' (or double-quote if possible: "I'm Groot").
+
+3. **Check checklists status** (if FEATURE_DIR/checklists/ exists):
    - Scan all checklist files in the checklists/ directory
    - For each checklist, count:
      - Total items: All lines matching `- [ ]` or `- [X]` or `- [x]`
@@ -37,13 +81,13 @@ You **MUST** consider the user input before proceeding (if not empty).
      * **STOP** and ask: "Some checklists are incomplete. Do you want to proceed with implementation anyway? (yes/no)"
      * Wait for user response before continuing
      * If user says "no" or "wait" or "stop", halt execution
-     * If user says "yes" or "proceed" or "continue", proceed to step 3
-   
+     * If user says "yes" or "proceed" or "continue", proceed to step 4
+
    - **If all checklists are complete**:
      * Display the table showing all checklists passed
-     * Automatically proceed to step 3
+     * Automatically proceed to step 4
 
-3. Load and analyze the implementation context:
+4. Load and analyze the implementation context:
    - **REQUIRED**: Read tasks.md for the complete task list and execution plan
    - **REQUIRED**: Read plan.md for tech stack, architecture, and file structure
    - **IF EXISTS**: Read data-model.md for entities and relationships
@@ -51,7 +95,7 @@ You **MUST** consider the user input before proceeding (if not empty).
    - **IF EXISTS**: Read research.md for technical decisions and constraints
    - **IF EXISTS**: Read quickstart.md for integration scenarios
 
-4. **Project Setup Verification**:
+5. **Project Setup Verification**:
    - **REQUIRED**: Create/verify ignore files based on actual project setup:
    
    **Detection & Creation Logic**:
@@ -85,28 +129,28 @@ You **MUST** consider the user input before proceeding (if not empty).
    - **Prettier**: `node_modules/`, `dist/`, `build/`, `coverage/`, `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`
    - **Terraform**: `.terraform/`, `*.tfstate*`, `*.tfvars`, `.terraform.lock.hcl`
 
-5. Read tasks.md structure and use Beads to extract:
+6. Read tasks.md structure and use Beads to extract:
    - **Task phases**: Setup, Tests, Core, Integration, Polish
    - **Task dependencies**: Sequential vs parallel execution rules
    - **Task details**: ID, description, file paths, design + acceptance criteria
    - **Task comments**: Important notes and modifications to original plan
    - **Execution flow**: Order and dependency requirements
 
-6. Execute implementation following the task plan:
+7. Execute implementation following the task plan:
    - **Phase-by-phase execution**: Complete each phase before moving to the next
    - **Respect dependencies**: Run sequential tasks in order, parallel tasks [P] can run together  
    - **Follow TDD approach**: Execute test tasks before their corresponding implementation tasks
    - **File-based coordination**: Tasks affecting the same files must run sequentially
    - **Validation checkpoints**: Verify each phase completion before proceeding
 
-7. Implementation execution rules:
+8. Implementation execution rules:
    - **Setup first**: Initialize project structure, dependencies, configuration
    - **Tests before code**: If you need to write tests for contracts, entities, and integration scenarios
    - **Core development**: Implement models, services, CLI commands, endpoints
    - **Integration work**: Database connections, middleware, logging, external services
    - **Polish and validation**: Unit tests, performance optimization, documentation
 
-8. Progress tracking and error handling:
+9. Progress tracking and error handling:
    - Find ready tasks using `bd ready --label "spec:......"`
    - Update Beads Issues progress with Comments and Progress
    - Report progress after each completed task
@@ -116,7 +160,7 @@ You **MUST** consider the user input before proceeding (if not empty).
    - Suggest next steps if implementation cannot proceed
    - **IMPORTANT** For completed tasks, make sure to add relevant comments and update the Beads task status to "Closed"
 
-9. Completion validation:
+10. Completion validation:
    - Verify all required tasks are completed
    - Check that implemented features match the original specification
    - Validate that tests pass and coverage meets requirements
@@ -124,3 +168,15 @@ You **MUST** consider the user input before proceeding (if not empty).
    - Report final status with summary of completed work
 
 Note: This command assumes a complete task breakdown exists in tasks.md. If tasks are incomplete or missing, suggest running `/specledger.tasks` first to regenerate the task list.
+
+---
+
+## Beads Sync Error Handling
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| Merge conflict in issues.jsonl | Concurrent edits | Run `bd sync --resolve` |
+| Prefix mismatch | Different ID prefixes | Use `--rename-on-import` flag |
+| Import failed | Invalid JSONL format | Check `.beads/issues.jsonl` syntax |
+| No issues found | Empty JSONL or wrong project | Run `bd list --status=all` to verify |
+| Git pull failed | Uncommitted changes | Commit or stash changes first |
