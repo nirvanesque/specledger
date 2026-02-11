@@ -137,6 +137,8 @@ flowchart TD
     US4 --> P7
 ```
 
+**Flow**: Setup → Foundational → User Stories (parallel) → Polish. All four user stories can run in parallel after Phase 2, then converge to Phase 7.
+
 ## MVP Scope
 
 **Suggested MVP**: Phase 1 + Phase 2 + Phase 3 (US1: CLI Login)
