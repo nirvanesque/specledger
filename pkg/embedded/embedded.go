@@ -4,12 +4,8 @@ import (
 	"embed"
 )
 
-//go:embed skills
+//go:embed all:skills
 var SkillsFS embed.FS
 
-// TemplatesFS provides template file system access for SpecLedger playbooks.
-// It includes the templates/ directory structure and some SpecLedger-specific
-// configuration files for initialization.
-//
-//go:embed templates templates/specledger/.claude templates/specledger/.specledger
+//go:embed all:templates
 var TemplatesFS embed.FS

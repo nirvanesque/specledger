@@ -146,7 +146,7 @@ func runBootstrapInteractive(l *logger.Logger, cfg *config.Config) error {
 	}
 
 	// Setup SpecLedger project (playbooks, skills, metadata, git)
-	_, _, _, err = setupSpecLedgerProject(projectPath, projectName, shortCode, playbookName, true)
+	_, _, _, err = setupSpecLedgerProject(projectPath, projectName, shortCode, playbookName, true, false)
 	if err != nil {
 		return err
 	}
@@ -208,7 +208,7 @@ func runBootstrapNonInteractive(cmd *cobra.Command, l *logger.Logger, cfg *confi
 	}
 
 	// Setup SpecLedger project (playbooks, skills, metadata, git)
-	_, _, _, err := setupSpecLedgerProject(projectPath, projectName, shortCode, "", true)
+	_, _, _, err := setupSpecLedgerProject(projectPath, projectName, shortCode, "", true, false)
 	if err != nil {
 		return err
 	}
@@ -271,7 +271,7 @@ func runInit(l *logger.Logger) error {
 
 	// Setup SpecLedger project (playbooks, skills, metadata, no git)
 	// Note: initGit=false because we're in an existing repo
-	_, _, _, err = setupSpecLedgerProject(projectPath, projectName, shortCode, initPlaybookFlag, false)
+	_, _, _, err = setupSpecLedgerProject(projectPath, projectName, shortCode, initPlaybookFlag, false, initForceFlag)
 	if err != nil {
 		return err
 	}
