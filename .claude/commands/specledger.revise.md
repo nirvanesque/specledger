@@ -88,7 +88,8 @@ curl -s "${SUPABASE_URL}/rest/v1/comments?select=*&issue_id=eq.${SPEC_KEY}" \
 
 #### Review Comments (table: `review_comments`)
 ```bash
-curl -s "${SUPABASE_URL}/rest/v1/review_comments?select=*&file_path=like.*${SPEC_KEY}*&is_resolved=eq.false" \
+# Fetch ALL review comments (both resolved and unresolved)
+curl -s "${SUPABASE_URL}/rest/v1/review_comments?select=*&file_path=like.*${SPEC_KEY}*&order=created_at.desc" \
   -H "apikey: ${SUPABASE_ANON_KEY}" \
   -H "Authorization: Bearer ${ACCESS_TOKEN}"
 ```
@@ -115,23 +116,25 @@ After fetching, immediately output this summary:
 📝 REVIEW COMMENTS (file-level)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-#{id (8 chars)} | {author_name} | {created_at} | ⏳ unresolved
+#{id (8 chars)} | {author_name} | {created_at} | {✅ resolved | ⏳ unresolved}
     📁 File: {file_path}
     📍 Line: {line} (if available)
     📌 Selected: "{selected_text}" (if available)
     💬 Comment: "{content}"
 
-(If empty: display "(No unresolved review comments)")
+(If empty: display "(No review comments)")
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📊 Total: {n} issue comments, {m} review comments
+📊 Total: {n} issue comments, {m} review comments ({x} unresolved, {y} resolved)
 ```
 
 **Rules for display:**
 - ALWAYS show the summary, even if there are no comments
-- Display ALL comments from both tables before asking any questions
+- Display ALL comments from both tables (resolved AND unresolved) before asking any questions
+- Show status indicator: ✅ for resolved, ⏳ for unresolved
 - Use the exact format above for consistency
 - If no comments found, still show the summary with "(No comments)" messages
+- Only process unresolved comments interactively (skip resolved ones)
 
 ### A3. Process Each Comment Interactively
 
@@ -394,7 +397,7 @@ Next: /specledger.revise to see all comments
 ## Example Usage
 
 ```bash
-# Default: fetch and process all unresolved comments
+# Default: fetch ALL comments (resolved + unresolved), process unresolved ones
 /specledger.revise
 
 # Specify spec explicitly
