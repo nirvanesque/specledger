@@ -14,7 +14,7 @@ import (
 const (
 	// StorageBucket is the Supabase Storage bucket for sessions
 	StorageBucket = "sessions"
-	// StorageTimeout is the timeout for storage operations
+	// StorageTimeout is the timeout for storage operations (30 seconds)
 	StorageTimeout = 30 * time.Second
 )
 
