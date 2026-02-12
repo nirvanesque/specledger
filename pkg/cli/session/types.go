@@ -94,11 +94,18 @@ type QueueEntry struct {
 
 // TranscriptLine represents a single line from the Claude Code transcript JSONL
 type TranscriptLine struct {
-	Type      string    `json:"type"`               // "user", "assistant", "tool_use", etc.
-	Content   string    `json:"content,omitempty"`  // message content
-	Timestamp time.Time `json:"timestamp"`          // when recorded
-	UUID      string    `json:"uuid,omitempty"`     // message UUID
-	Role      string    `json:"role,omitempty"`     // alternative to type
+	Type      string           `json:"type"`               // "user", "assistant", "tool_use", etc.
+	Message   *TranscriptMsg   `json:"message,omitempty"`  // nested message object
+	Content   string           `json:"content,omitempty"`  // direct content (fallback)
+	Timestamp time.Time        `json:"timestamp"`          // when recorded
+	UUID      string           `json:"uuid,omitempty"`     // message UUID
+	Role      string           `json:"role,omitempty"`     // alternative to type
+}
+
+// TranscriptMsg represents the nested message in Claude Code transcripts
+type TranscriptMsg struct {
+	Role    string      `json:"role"`              // "user" or "assistant"
+	Content interface{} `json:"content,omitempty"` // string or array of content blocks
 }
 
 // CaptureResult represents the outcome of a capture operation

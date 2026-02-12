@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -121,10 +122,17 @@ func ComputeDelta(transcriptPath string, lastOffset int64) ([]Message, int64, er
 
 // transcriptLineToMessage converts a transcript line to a message
 func transcriptLineToMessage(tl TranscriptLine) *Message {
-	// Determine role from type or role field
-	role := tl.Role
-	if role == "" {
-		role = tl.Type
+	// Only capture user and assistant message types
+	if tl.Type != "user" && tl.Type != "assistant" {
+		return nil
+	}
+
+	// Determine role - prefer nested message role, fallback to type
+	role := tl.Type
+	if tl.Message != nil && tl.Message.Role != "" {
+		role = tl.Message.Role
+	} else if tl.Role != "" {
+		role = tl.Role
 	}
 
 	// Only capture user and assistant messages
@@ -132,8 +140,16 @@ func transcriptLineToMessage(tl TranscriptLine) *Message {
 		return nil
 	}
 
+	// Extract content - check nested message first, then direct content
+	var content string
+	if tl.Message != nil && tl.Message.Content != nil {
+		content = extractContent(tl.Message.Content)
+	} else if tl.Content != "" {
+		content = tl.Content
+	}
+
 	// Skip empty content
-	if tl.Content == "" {
+	if content == "" {
 		return nil
 	}
 
@@ -144,8 +160,29 @@ func transcriptLineToMessage(tl TranscriptLine) *Message {
 
 	return &Message{
 		Role:      role,
-		Content:   tl.Content,
+		Content:   content,
 		Timestamp: timestamp,
+	}
+}
+
+// extractContent extracts string content from various formats
+func extractContent(c interface{}) string {
+	switch v := c.(type) {
+	case string:
+		return v
+	case []interface{}:
+		// Array of content blocks - extract text from each
+		var parts []string
+		for _, item := range v {
+			if m, ok := item.(map[string]interface{}); ok {
+				if text, ok := m["text"].(string); ok {
+					parts = append(parts, text)
+				}
+			}
+		}
+		return strings.Join(parts, "\n")
+	default:
+		return ""
 	}
 }
 
