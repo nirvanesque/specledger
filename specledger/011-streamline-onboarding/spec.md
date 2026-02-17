@@ -3,53 +3,56 @@
 **Feature Branch**: `011-streamline-onboarding`
 **Created**: 2026-02-17
 **Status**: Draft
-**Input**: User description: "Simplify sl commands so onboarding is easier. After sl init or sl new, start coding agent session immediately. sl init should ask the same questions as sl new if not answered. AI coding agent should guide user through specify → clarify → plan → implement workflow."
+**Input**: User description: "Simplify sl commands so onboarding is easier. After sl init or sl new, start coding agent session immediately. sl init should ask the same questions as sl new if not answered. AI coding agent should guide user through specify → clarify → plan → implement workflow. Project config is defined in CONSTITUTION.md — sl new always creates constitution; sl init checks for existing constitution and if missing, launches explore agent to analyze codebase and propose guiding principles via ask-user-question."
 
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Unified Interactive Setup for New Projects (Priority: P1)
 
-A new user runs `sl new` to create a project. They answer a few setup questions (project name, directory, short code, playbook), then are asked which AI coding agent they prefer (e.g., Claude Code, Cursor, Windsurf). After confirming, SpecLedger creates the project and immediately launches their chosen coding agent with an onboarding prompt that guides them through the SpecLedger workflow.
+A new user runs `sl new` to create a project. They answer setup questions (project name, directory, short code, playbook), then are guided through creating their project constitution — defining core principles, coding standards, and guiding values for the project. Finally, they are asked which AI coding agent they prefer (e.g., Claude Code). After confirming, SpecLedger creates the project with a populated constitution and immediately launches their chosen coding agent with an onboarding prompt that guides them through the SpecLedger workflow.
 
-**Why this priority**: This is the primary onboarding path for brand-new users. If new users can go from zero to a guided AI session in a single command, adoption friction drops dramatically. This story delivers the full end-to-end value of the feature.
+**Why this priority**: This is the primary onboarding path for brand-new users. If new users can go from zero to a guided AI session in a single command — with a meaningful project constitution already in place — adoption friction drops dramatically. The constitution ensures all subsequent AI-assisted work (specify, plan, implement) is grounded in explicit project values from day one.
 
-**Independent Test**: Can be fully tested by running `sl new`, answering all prompts, and verifying the coding agent launches with a guided onboarding message. Delivers immediate value: user is inside an AI session ready to create their first feature.
+**Independent Test**: Can be fully tested by running `sl new`, answering all prompts including constitution principles, and verifying the project is created with a populated CONSTITUTION.md and the coding agent launches with a guided onboarding message.
 
 **Acceptance Scenarios**:
 
-1. **Given** a user with no existing project, **When** they run `sl new` and complete all prompts including agent preference, **Then** the project is created and their preferred coding agent launches automatically with a guided onboarding prompt.
-2. **Given** a user running `sl new` who selects "None" for coding agent, **When** project creation completes, **Then** the project is created normally and SpecLedger displays a message suggesting they run their coding agent manually with a provided command.
-3. **Given** a user running `sl new` in CI mode (`--ci`), **When** project creation completes, **Then** no coding agent is launched (non-interactive environments skip agent launch).
+1. **Given** a user with no existing project, **When** they run `sl new` and complete all prompts including constitution and agent preference, **Then** the project is created with a populated CONSTITUTION.md and their preferred coding agent launches automatically with a guided onboarding prompt.
+2. **Given** a user creating a new project, **When** they reach the constitution step, **Then** they are presented with suggested guiding principles (e.g., specification-first, test-first, code quality) and can accept, modify, or add their own via interactive prompts.
+3. **Given** a user running `sl new` who selects "None" for coding agent, **When** project creation completes, **Then** the project is created with a populated constitution and SpecLedger displays a message suggesting they run their coding agent manually with a provided command.
+4. **Given** a user running `sl new` in CI mode (`--ci`), **When** project creation completes, **Then** no coding agent is launched and constitution creation uses provided flags or defaults (non-interactive environments skip interactive prompts).
 
 ---
 
 ### User Story 2 - Unified Interactive Setup for Existing Repositories (Priority: P1)
 
-A user runs `sl init` in an existing repository that has not been configured with SpecLedger yet. Instead of silently using defaults, `sl init` detects that setup questions have not been answered and presents the same interactive prompts as `sl new` (minus project name and directory, since those are already determined by the current repository). After setup, the user is offered the option to launch their preferred coding agent with the onboarding guide.
+A user runs `sl init` in an existing repository that has not been configured with SpecLedger yet. Instead of silently using defaults, `sl init` detects that setup questions have not been answered and presents the same interactive prompts as `sl new` (minus project name and directory, since those are already determined by the current repository). For the constitution step, `sl init` first checks whether a CONSTITUTION.md already exists in the project. If one exists, it is used as-is. If no constitution exists, the system launches an exploration step that analyzes the existing codebase — identifying languages, frameworks, patterns, and conventions — and proposes tailored guiding principles for the constitution. The user is then presented with these proposed principles and can accept, modify, or add their own. After setup, the user is offered the option to launch their preferred coding agent with the onboarding guide.
 
-**Why this priority**: `sl init` is the primary path for users adopting SpecLedger in existing projects. Without interactive prompts, users miss important configuration and don't get a guided introduction. This has equal importance with User Story 1 since both are entry points.
+**Why this priority**: `sl init` is the primary path for users adopting SpecLedger in existing projects. Without interactive prompts, users miss important configuration and don't get a guided introduction. The codebase-aware constitution proposal is critical here because existing projects already have implicit conventions that should be captured, not ignored. This has equal importance with User Story 1 since both are entry points.
 
-**Independent Test**: Can be fully tested by running `sl init` in an uninitialized git repository, verifying it prompts for short code, playbook, and agent preference, then confirming the agent launches with a guided message.
+**Independent Test**: Can be fully tested by running `sl init` in an uninitialized git repository with existing code, verifying it analyzes the codebase, proposes constitution principles reflecting the detected technologies and patterns, prompts for user confirmation, then launches the agent with a guided message.
 
 **Acceptance Scenarios**:
 
-1. **Given** a user in an existing git repository without SpecLedger, **When** they run `sl init`, **Then** they are presented with interactive prompts for short code, playbook selection, and agent preference.
-2. **Given** a user in a repository already initialized with SpecLedger, **When** they run `sl init`, **Then** they are informed the project is already initialized and offered to re-run setup with `--force`, without re-asking already-answered questions.
-3. **Given** a user who provides `--short-code` and `--playbook` flags, **When** they run `sl init`, **Then** those prompts are skipped and only the unanswered questions (e.g., agent preference) are asked.
+1. **Given** a user in an existing git repository without SpecLedger and without a CONSTITUTION.md, **When** they run `sl init`, **Then** the system analyzes the codebase to detect languages, frameworks, and conventions, proposes tailored guiding principles, and presents them for user review and customization.
+2. **Given** a user in an existing git repository that already has a CONSTITUTION.md, **When** they run `sl init`, **Then** the existing constitution is preserved and used, and the user is not prompted to create a new one.
+3. **Given** a user in a repository already initialized with SpecLedger, **When** they run `sl init`, **Then** they are informed the project is already initialized and offered to re-run setup with `--force`, without re-asking already-answered questions.
+4. **Given** a user who provides `--short-code` and `--playbook` flags, **When** they run `sl init`, **Then** those prompts are skipped and only the unanswered questions (e.g., constitution, agent preference) are asked.
+5. **Given** the codebase analysis detects a Go project with Cobra CLI and Bubble Tea TUI, **When** the system proposes constitution principles, **Then** the proposed principles reflect these technologies (e.g., "CLI-First Interface", "Interactive TUI Experience") rather than generic defaults.
 
 ---
 
 ### User Story 3 - Guided First Feature Workflow (Priority: P2)
 
-After the coding agent launches from `sl new` or `sl init`, it presents a clear guided walkthrough of the SpecLedger workflow. The agent explains each step and leads the user through creating their first feature specification, clarifying it, planning the implementation, generating tasks, reviewing tasks, and only then running implementation.
+After the coding agent launches from `sl new` or `sl init`, it presents a clear guided walkthrough of the SpecLedger workflow. The agent first confirms the project constitution is in place (it was created during setup), then leads the user through creating their first feature specification, clarifying it, planning the implementation, generating tasks, reviewing tasks, and only then running implementation. The constitution serves as the foundation that informs every subsequent step.
 
 **Why this priority**: The guided workflow converts a first-time user into a productive user. Without it, users launch the agent but don't know what to do next. This story depends on Stories 1 and 2 being in place but is the key differentiator for user retention.
 
-**Independent Test**: Can be tested by launching a coding agent with the onboarding prompt in any initialized SpecLedger project and verifying it walks through the full workflow sequence with appropriate pauses for user input.
+**Independent Test**: Can be tested by launching a coding agent with the onboarding prompt in any initialized SpecLedger project (with constitution already created) and verifying it walks through the full workflow sequence with appropriate pauses for user input.
 
 **Acceptance Scenarios**:
 
-1. **Given** a coding agent launched via SpecLedger onboarding, **When** the session starts, **Then** the agent explains the SpecLedger workflow and prompts the user to describe their first feature.
+1. **Given** a coding agent launched via SpecLedger onboarding, **When** the session starts, **Then** the agent confirms the constitution is in place, explains the SpecLedger workflow, and prompts the user to describe their first feature.
 2. **Given** a user who has described a feature, **When** the agent runs `/specledger.specify`, **Then** it proceeds to `/specledger.clarify` and explains why clarification matters before continuing.
 3. **Given** a user who has completed specify and clarify, **When** the agent runs `/specledger.plan` and `/specledger.tasks`, **Then** it pauses and asks the user to review all generated tasks before proceeding.
 4. **Given** a user who has reviewed and approved the tasks, **When** the user confirms, **Then** the agent runs `/specledger.implement` to begin executing the tasks.
