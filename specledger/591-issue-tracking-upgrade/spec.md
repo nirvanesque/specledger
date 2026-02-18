@@ -116,19 +116,19 @@ As a developer, I want the system to check definition of done criteria before al
 
 ---
 
-### User Story 7 - Update Implement and Plan Skills/Prompts (Priority: P2)
+### User Story 7 - Update Implement and Tasks Skills/Prompts (Priority: P2)
 
-As a SpecLedger maintainer, I want to update the implement and plan command prompts and skills to be aware of the issue tracking system so that developers can manage issues as part of their implementation workflow.
+As a SpecLedger maintainer, I want to update the implement and tasks command prompts and skills to be aware of the issue tracking system so that developers can manage issues as part of their implementation workflow.
 
-**Why this priority**: Integration with implement and plan commands ensures issues are checked before closing, enforcing quality standards and preventing incomplete work from being marked as done.
+**Why this priority**: Integration with implement and tasks commands ensures issues are checked before closing, enforcing quality standards and preventing incomplete work from being marked as done.
 
-**Independent Test**: Can be tested by updating the implement and plan skill definitions to include issue tracking awareness, then verifying that the commands properly check definition_of_done fields and prevent closure of issues with unmet criteria.
+**Independent Test**: Can be tested by updating the implement and tasks skill definitions to include issue tracking awareness, then verifying that the commands properly check definition_of_done fields and prevent closure of issues with unmet criteria.
 
 **Acceptance Scenarios**:
 
 1. **Given** the implement skill is updated with issue tracking awareness, **When** a developer attempts to close an issue via the implement command, **Then** the system checks the issue's `definition_of_done` field and prevents closure if criteria are not met
-2. **Given** the plan command prompt is updated with issue context, **When** a developer runs `sl plan` in a spec with open issues, **Then** the prompt displays relevant open issues and their status
-3. **Given** implement and plan skills are updated, **When** a developer uses these commands, **Then** they receive guidance on managing issues as part of their workflow without requiring external tools
+2. **Given** the tasks command prompt is updated with issue context, **When** a developer runs `sl tasks` in a spec with open issues, **Then** the prompt displays relevant open issues and their status
+3. **Given** implement and tasks skills are updated, **When** a developer uses these commands, **Then** they receive guidance on managing issues as part of their workflow without requiring external tools
 
 ---
 
@@ -194,7 +194,7 @@ As a SpecLedger maintainer, I want to remove all dependencies on Beads and Perle
 - **FR-025**: System MUST support definition_of_done field format with checklist items that can be verified programmatically or manually
 - **FR-026**: Implement skills and command prompt MUST check definition_of_done field before closing issues and prevent closure if criteria are not met
 - **FR-027**: Implement skill MUST be updated to include issue tracking awareness and enforce definition_of_done checks during issue closure
-- **FR-028**: Plan command prompt MUST be updated to display relevant open issues and their status for the current spec context
+- **FR-028**: Tasks command prompt MUST be updated to display relevant open issues and their status for the current spec context
 - **FR-029**: `sl init` bootstrap MUST NOT check for or require Beads or Perles installation
 - **FR-030**: All prerequisite validation checks MUST be updated to remove references to Beads daemon status and Perles availability
 - **FR-031**: All initialization logic MUST use only native sl CLI functionality without spawning or requiring external Beads daemon processes
@@ -219,7 +219,7 @@ As a SpecLedger maintainer, I want to remove all dependencies on Beads and Perle
 - **SC-007**: Issue IDs are deterministically generated with < 0.01% collision probability for up to 100,000 issues
 - **SC-008**: Duplicate detection catches > 90% of semantically similar issues (title/description similarity)
 - **SC-009**: Definition of done checks prevent closure of issues that don't meet criteria (100% enforcement with --force override)
-- **SC-010**: Implement and plan commands are aware of issue tracking and guide developers through issue management workflows
+- **SC-010**: Implement and tasks commands are aware of issue tracking and guide developers through issue management workflows
 - **SC-011**: `sl init` completes successfully without Beads or Perles dependencies, reducing setup time by eliminating daemon startup
 - **SC-012**: All prerequisite checks pass on systems without Beads or Perles installed, confirming standalone operation
 
@@ -236,7 +236,7 @@ As a SpecLedger maintainer, I want to remove all dependencies on Beads and Perle
 - Git for branch detection (existing)
 - SHA-256 hashing (standard library)
 - String similarity algorithm for duplicate detection (e.g., Levenshtein distance or Jaro-Winkler)
-- Implement and plan skill system (existing)
+- Implement and tasks skill system (existing)
 
 ### Assumptions
 
@@ -250,7 +250,7 @@ As a SpecLedger maintainer, I want to remove all dependencies on Beads and Perle
 - Definition of done is optional; if not present in an issue record, no checks are performed
 - Users will maintain definition_of_done field in a consistent format for reliable parsing
 - Implement skills and command prompt will integrate definition_of_done checks before allowing issue closure
-- Implement and plan skills can be updated to include issue tracking awareness without breaking existing functionality
+- Implement and tasks skills can be updated to include issue tracking awareness without breaking existing functionality
 - Beads and Perles are no longer required for SpecLedger operation after this feature is implemented
 - Existing codebases using Beads can migrate to the new issue tracking system via `sl issue migrate`
 
