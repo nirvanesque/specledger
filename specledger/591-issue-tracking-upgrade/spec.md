@@ -5,6 +5,14 @@
 **Status**: Draft
 **Input**: User description: "Beads is slow, need to kill daemon. We don't need beads issue tracking, can be replaced with the sl binary. Usage of beads couple specledger with beads. Solution: Removed the beads + perles usage. Create simple issue tracker within sl CLI. Opensource CLI -> json file artifacts. Use backward comp beads artifact. Don't keep issue list at repo root, keep at spec level so there's less cross branch conflicts."
 
+## Clarifications
+
+### Session 2026-02-18
+
+- Q: How should merge conflicts on issues.jsonl be resolved when merging branches? → A: Auto-merge with dedup (automatically deduplicate by issue ID, keeping both versions' changes where possible)
+- Q: What priority scale should issues use? → A: Numeric 0-5 (0 = highest, 5 = lowest; matches Beads format)
+- Q: What should happen when issue commands run outside a feature branch context? → A: Fail with error (clear message: "Not on a feature branch. Use --spec flag or checkout a ###-branch.")
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Create and Manage Issues (Priority: P1)
@@ -77,6 +85,8 @@ As a developer working on multiple features, I want to list and filter issues ac
 - How does the system handle concurrent writes to issues.jsonl? File locking prevents corruption; operations queue if lock is held.
 - What happens if issues.jsonl becomes corrupted? A `sl issue repair` command attempts to recover valid JSON lines and reports any unrecoverable data.
 - How are issue IDs generated to avoid conflicts? IDs use format `SL-###` where ### is auto-incremented per spec directory, ensuring uniqueness within each spec context.
+- How are merge conflicts on issues.jsonl resolved? Auto-merge with deduplication by issue ID, preserving both branches' changes where possible.
+- What happens if commands run outside a feature branch? Command fails with error: "Not on a feature branch. Use --spec flag or checkout a ###-branch."
 
 ## Requirements *(mandatory)*
 
@@ -87,23 +97,25 @@ As a developer working on multiple features, I want to list and filter issues ac
 - **FR-003**: System MUST generate unique issue IDs within each spec directory using format `SL-###`
 - **FR-004**: System MUST support issue types: epic, feature, task, bug
 - **FR-005**: System MUST support issue statuses: open, in_progress, closed
-- **FR-006**: System MUST provide `sl issue create` command with flags for --title, --description, --type, --priority
-- **FR-007**: System MUST provide `sl issue list` command with optional --status, --type, --all flags
-- **FR-008**: System MUST provide `sl issue update` command to modify existing issue fields
-- **FR-009**: System MUST provide `sl issue close` command that sets status to closed and records closed_at timestamp
-- **FR-010**: System MUST provide `sl issue show <id>` command to display full issue details
-- **FR-011**: System MUST maintain backward compatibility with Beads JSONL format for migration purposes
-- **FR-012**: System MUST provide `sl issue migrate` command to convert `.beads/issues.jsonl` to per-spec format
-- **FR-013**: System MUST support issue dependencies with fields: blocked_by, blocks
-- **FR-014**: System MUST provide `sl issue link <id1> <relationship> <id2>` for dependency management
-- **FR-015**: System MUST NOT require any daemon process or background service
-- **FR-016**: System MUST complete all operations with file I/O only (no database required)
-- **FR-017**: System MUST detect current spec context from git branch name (###-short-name pattern)
-- **FR-018**: System MUST support `--spec` flag to operate on a specific spec directory
+- **FR-006**: System MUST support issue priority as numeric 0-5 (0 = highest, 5 = lowest)
+- **FR-007**: System MUST provide `sl issue create` command with flags for --title, --description, --type, --priority
+- **FR-008**: System MUST provide `sl issue list` command with optional --status, --type, --all flags
+- **FR-009**: System MUST provide `sl issue update` command to modify existing issue fields
+- **FR-010**: System MUST provide `sl issue close` command that sets status to closed and records closed_at timestamp
+- **FR-011**: System MUST provide `sl issue show <id>` command to display full issue details
+- **FR-012**: System MUST maintain backward compatibility with Beads JSONL format for migration purposes
+- **FR-013**: System MUST provide `sl issue migrate` command to convert `.beads/issues.jsonl` to per-spec format
+- **FR-014**: System MUST support issue dependencies with fields: blocked_by, blocks
+- **FR-015**: System MUST provide `sl issue link <id1> <relationship> <id2>` for dependency management
+- **FR-016**: System MUST NOT require any daemon process or background service
+- **FR-017**: System MUST complete all operations with file I/O only (no database required)
+- **FR-018**: System MUST detect current spec context from git branch name (###-short-name pattern)
+- **FR-019**: System MUST fail with error when no spec context detected and no --spec flag provided
+- **FR-020**: System MUST auto-merge issues.jsonl conflicts by deduplicating on issue ID, preserving both branches' changes where possible
 
 ### Key Entities
 
-- **Issue**: Core tracking unit with unique ID, title, description, type (epic/feature/task/bug), status (open/in_progress/closed), priority, timestamps, and optional dependencies
+- **Issue**: Core tracking unit with unique ID, title, description, type (epic/feature/task/bug), status (open/in_progress/closed), priority (0-5, where 0=highest), timestamps, and optional dependencies
 - **IssueStore**: JSONL file at `specledger/<spec>/.sl/issues.jsonl` containing all issues for that spec
 - **Dependency**: Relationship between issues with type (blocks/blocked_by/parent-child) and direction
 
