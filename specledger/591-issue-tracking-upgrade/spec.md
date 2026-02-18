@@ -76,6 +76,7 @@ As a developer working on multiple features, I want to list and filter issues ac
 1. **Given** issues exist in multiple spec directories, **When** I run `sl issue list --all`, **Then** all issues from all specs are listed with their spec context
 2. **Given** issues across specs, **When** I run `sl issue list --all --status open`, **Then** only open issues from all specs are shown
 3. **Given** issues across specs, **When** I run `sl issue list --all --type epic`, **Then** only epic-type issues are shown with their spec prefixes
+4. **Given** I want to see issues from a specific spec, **When** I run `sl issue list --spec 010-my-feature`, **Then** only issues from that spec are displayed regardless of current branch context
 
 ---
 
@@ -99,7 +100,7 @@ As a developer working on multiple features, I want to list and filter issues ac
 - **FR-005**: System MUST support issue statuses: open, in_progress, closed
 - **FR-006**: System MUST support issue priority as numeric 0-5 (0 = highest, 5 = lowest)
 - **FR-007**: System MUST provide `sl issue create` command with flags for --title, --description, --type, --priority
-- **FR-008**: System MUST provide `sl issue list` command with optional --status, --type, --all flags
+- **FR-008**: System MUST provide `sl issue list` command with optional --status, --type, --all, and --spec flags
 - **FR-009**: System MUST provide `sl issue update` command to modify existing issue fields
 - **FR-010**: System MUST provide `sl issue close` command that sets status to closed and records closed_at timestamp
 - **FR-011**: System MUST provide `sl issue show <id>` command to display full issue details
@@ -112,6 +113,7 @@ As a developer working on multiple features, I want to list and filter issues ac
 - **FR-018**: System MUST detect current spec context from git branch name (###-short-name pattern)
 - **FR-019**: System MUST fail with error when no spec context detected and no --spec flag provided
 - **FR-020**: System MUST auto-merge issues.jsonl conflicts by deduplicating on issue ID, preserving both branches' changes where possible
+- **FR-021**: System MUST support `--spec <spec-name>` flag on `sl issue list` to filter issues from a specific spec directory
 
 ### Key Entities
 
