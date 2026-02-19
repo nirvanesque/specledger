@@ -41,7 +41,7 @@ Non-interactive mode (for CI/CD):
 
 The bootstrap creates:
 - .claude/ directory with skills and commands
-- .beads/ directory for issue tracking
+- Built-in issue tracking via sl issue commands
 - github.com/specledger/specledger/ directory for specifications
 - github.com/specledger/specledger/specledger.yaml file for project metadata`,
 
@@ -81,7 +81,7 @@ Usage:
 
 The init creates:
 - .claude/ directory with skills
-- .beads/ directory for issue tracking
+- Built-in issue tracking via sl issue commands
 - github.com/specledger/specledger/ directory for specifications
 - github.com/specledger/specledger/specledger.yaml file for project metadata`,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -153,12 +153,13 @@ func runBootstrapInteractive(l *logger.Logger, cfg *config.Config) error {
 
 	// Success message
 	ui.PrintHeader("Project Created Successfully", "", 60)
-	fmt.Printf("  Path:       %s\n", ui.Bold(projectPath))
-	fmt.Printf("  Beads:      %s\n", ui.Bold(shortCode))
+	fmt.Printf("  Path:        %s\n", ui.Bold(projectPath))
+	fmt.Printf("  Short Code:  %s\n", ui.Bold(shortCode))
 	fmt.Println()
 	fmt.Println(ui.Bold("Next steps:"))
 	fmt.Printf("  %s    %s\n", ui.Cyan("cd"), projectPath)
 	fmt.Printf("  %s  %s\n", ui.Cyan("sl doctor"), ui.Dim("# Check tool installation status"))
+	fmt.Printf("  %s       %s\n", ui.Cyan("sl issue"), ui.Dim("# Issue tracking"))
 	fmt.Println()
 
 	return nil
@@ -216,7 +217,7 @@ func runBootstrapNonInteractive(cmd *cobra.Command, l *logger.Logger, cfg *confi
 	// Success message
 	ui.PrintHeader("Project Created Successfully", "", 60)
 	fmt.Printf("  Path:       %s\n", ui.Bold(projectPath))
-	fmt.Printf("  Beads:      %s\n", ui.Bold(shortCode))
+	fmt.Printf("  Short Code: %s\n", ui.Bold(shortCode))
 	fmt.Println()
 	fmt.Println(ui.Bold("Next steps:"))
 	fmt.Printf("  %s    %s\n", ui.Cyan("cd"), projectPath)
@@ -292,7 +293,7 @@ func runInit(l *logger.Logger) error {
 	// Success message
 	ui.PrintHeader("SpecLedger Initialized", "", 60)
 	fmt.Printf("  Directory:  %s\n", ui.Bold(projectPath))
-	fmt.Printf("  Beads:      %s\n", ui.Bold(shortCode))
+	fmt.Printf("  Short Code: %s\n", ui.Bold(shortCode))
 	fmt.Printf("  Metadata:   %s\n", ui.Bold("github.com/specledger/specledger/specledger.yaml"))
 	fmt.Println()
 	ui.PrintSuccess("SpecLedger is ready to use!")
