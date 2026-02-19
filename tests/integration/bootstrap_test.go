@@ -56,11 +56,8 @@ func TestBootstrapNewCI(t *testing.T) {
 		t.Errorf("Expected playbook 'specledger', got %s", meta.Playbook.Name)
 	}
 
-	// Verify .beads directory was created
-	beadsPath := filepath.Join(projectPath, ".beads")
-	if _, err := os.Stat(beadsPath); os.IsNotExist(err) {
-		t.Error(".beads directory not created")
-	}
+	// Note: .beads directory is no longer created (beads dependency removed)
+	// Issues are now stored per-spec in specledger/<spec>/issues.jsonl
 
 	// Verify mise.toml was created
 	misePath := filepath.Join(projectPath, "mise.toml")
@@ -150,11 +147,8 @@ func TestBootstrapInitInExistingDirectory(t *testing.T) {
 		t.Errorf("Expected playbook 'specledger' for sl init, got %s", meta.Playbook.Name)
 	}
 
-	// Verify .beads was created
-	beadsPath := filepath.Join(existingDir, ".beads")
-	if _, err := os.Stat(beadsPath); os.IsNotExist(err) {
-		t.Error(".beads directory not created")
-	}
+	// Note: .beads directory is no longer created (beads dependency removed)
+	// Issues are now stored per-spec in specledger/<spec>/issues.jsonl
 }
 
 // TestBootstrapPrerequisiteChecking tests that prerequisites are checked during bootstrap

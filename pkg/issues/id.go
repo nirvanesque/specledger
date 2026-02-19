@@ -35,6 +35,7 @@ func GenerateIssueID(specContext, title string, createdAt time.Time) string {
 
 // ParseIssueID validates an issue ID format and returns it if valid.
 // Returns an error if the ID doesn't match the expected format.
+// Note: Only lowercase hex characters are valid since GenerateIssueID always produces lowercase.
 func ParseIssueID(id string) (string, error) {
 	if id == "" {
 		return "", ErrInvalidIDFormat
@@ -53,10 +54,11 @@ func ParseIssueID(id string) (string, error) {
 		return "", ErrInvalidIDFormat
 	}
 
-	// Validate hex characters
-	_, err := hex.DecodeString(hexPart)
-	if err != nil {
-		return "", ErrInvalidIDFormat
+	// Validate hex characters (lowercase only for consistency with generated IDs)
+	for _, c := range hexPart {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+			return "", ErrInvalidIDFormat
+		}
 	}
 
 	return id, nil
