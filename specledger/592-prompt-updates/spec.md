@@ -13,6 +13,7 @@
 - Q: How should the /specledger.implement command verify Definition of Done items before closing issues? → A: Automated where possible (verify programmatically), fall back to interactive for others
 - Q: What level of error detail should be provided when sl issue create/link commands fail? → A: Automatically fix errors when possible, retry with corrected parameters
 - Q: Should /specledger.tasks fill definition_of_done for generated issues? → A: Yes, populate DoD items from acceptance criteria in spec.md
+- Q: Should /specledger.tasks also display/reference DoD items in tasks.md? → A: Yes, include DoD summary in tasks.md for visibility and reference during implementation
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -44,8 +45,9 @@ As a developer running `/specledger.tasks`, I want the generated issues to be de
 
 1. **Given** a plan.md with clear components, **When** tasks are generated, **Then** each issue includes a concise title (under 80 chars), a problem statement explaining WHY, implementation details explaining HOW/WHERE, and acceptance criteria for WHAT success looks like
 2. **Given** tasks are being created from spec.md with acceptance criteria, **When** the `sl issue create` command is called, **Then** each issue should have definition_of_done items populated from the relevant acceptance criteria
-3. **Given** tasks are being created, **When** the `sl issue create` command is called, **Then** it should succeed without errors (automatically fix special characters, retry on transient failures)
-4. **Given** tasks need dependencies linked, **When** the `sl issue link` command is called, **Then** it should properly establish the relationship without errors
+3. **Given** tasks.md is generated, **When** viewing the file, **Then** it should include a DoD summary section listing the DoD items for each issue (referenceable by issue ID)
+4. **Given** tasks are being created, **When** the `sl issue create` command is called, **Then** it should succeed without errors (automatically fix special characters, retry on transient failures)
+5. **Given** tasks need dependencies linked, **When** the `sl issue link` command is called, **Then** it should properly establish the relationship without errors
 
 ---
 
@@ -82,11 +84,12 @@ As a developer implementing tasks with `/specledger.implement`, I want the syste
 - **FR-003**: The `/specledger.specify` command MUST prompt users to add missing dependencies when explicit references don't resolve
 - **FR-004**: The `/specledger.tasks` command MUST generate issues with structured content: title, problem statement (WHY), implementation details (HOW/WHERE), and acceptance criteria (WHAT)
 - **FR-005**: The `/specledger.tasks` command MUST populate definition_of_done items in each generated issue from acceptance criteria in spec.md
-- **FR-006**: The `/specledger.tasks` command MUST handle `sl issue create` and `sl issue link` errors by automatically retrying with corrected parameters
-- **FR-007**: The `/specledger.implement` command MUST attempt automated verification of DoD items where possible (file existence, test results, syntax validation)
-- **FR-008**: The `/specledger.implement` command MUST fall back to interactive confirmation for DoD items that cannot be verified automatically
-- **FR-009**: The `/specledger.implement` command MUST display failed verification results with clear explanations before requiring explicit confirmation
-- **FR-010**: Both `.claude/commands/` and `pkg/embedded/skills/commands/` prompt files MUST be updated with the same changes
+- **FR-006**: The `/specledger.tasks` command MUST include a DoD summary section in tasks.md referencing the DoD items for each generated issue
+- **FR-007**: The `/specledger.tasks` command MUST handle `sl issue create` and `sl issue link` errors by automatically retrying with corrected parameters
+- **FR-008**: The `/specledger.implement` command MUST attempt automated verification of DoD items where possible (file existence, test results, syntax validation)
+- **FR-009**: The `/specledger.implement` command MUST fall back to interactive confirmation for DoD items that cannot be verified automatically
+- **FR-010**: The `/specledger.implement` command MUST display failed verification results with clear explanations before requiring explicit confirmation
+- **FR-011**: Both `.claude/commands/` and `pkg/embedded/skills/commands/` prompt files MUST be updated with the same changes
 
 ### Key Entities
 
@@ -112,5 +115,5 @@ As a developer implementing tasks with `/specledger.implement`, I want the syste
 ### Epic: 592 - Improve SpecLedger Command Prompts
 
 - **Dependency-aware specification**: Recognize and load external dependencies during spec creation
-- **Quality task generation**: Generate descriptive, complete, concise issues with proper error handling
+- **Quality task generation**: Generate descriptive, complete, concise issues with DoD items, include DoD summary in tasks.md
 - **DoD-enforced implementation**: Verify definition of done and acceptance criteria during implementation
