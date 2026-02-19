@@ -118,9 +118,15 @@ func applyEmbeddedSkills(projectPath string) error {
 			return fmt.Errorf("failed to read embedded file %s: %w", path, err)
 		}
 
+		// Determine permissions based on file type
+		perm := os.FileMode(0644) // Default: readable by all
+		if strings.HasSuffix(destPath, ".sh") {
+			perm = 0755 // Shell scripts: executable
+		}
+
 		// Write to destination
-		// #nosec G306 -- skill files need to be readable, 0644 is appropriate
-		if err := os.WriteFile(destPath, data, 0644); err != nil {
+		// #nosec G306 -- permissions are set based on file type above
+		if err := os.WriteFile(destPath, data, perm); err != nil {
 			return fmt.Errorf("failed to write file %s: %w", destPath, err)
 		}
 

@@ -166,6 +166,7 @@ func matchesPattern(path string, patterns []string) bool {
 }
 
 // copyEmbeddedFile copies a single file from embedded FS to dest.
+// Shell scripts (.sh files) are made executable.
 func copyEmbeddedFile(src, dest string) error {
 	// Read from embedded filesystem
 	srcFile, err := ReadFile(src)
@@ -173,7 +174,13 @@ func copyEmbeddedFile(src, dest string) error {
 		return fmt.Errorf("failed to read embedded file: %w", err)
 	}
 
+	// Determine permissions based on file type
+	perm := os.FileMode(0644) // Default: readable by all
+	if strings.HasSuffix(dest, ".sh") {
+		perm = 0755 // Shell scripts: executable
+	}
+
 	// Write to destination
-	// #nosec G306 -- playbook files need to be readable, 0644 is appropriate
-	return os.WriteFile(dest, srcFile, 0644)
+	// #nosec G306 -- permissions are set based on file type above
+	return os.WriteFile(dest, srcFile, perm)
 }
