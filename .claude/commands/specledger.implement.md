@@ -130,6 +130,47 @@ Execute the implementation plan by processing all tasks in tasks.md. This comman
    - Suggest next steps if implementation cannot proceed
    - **IMPORTANT** For completed tasks, make sure to close the issue: `sl issue close <id> --reason "Completed"`
 
+9a. **Definition of Done Verification** (before closing issues):
+
+   Before closing any issue, verify its Definition of Done items:
+
+   1. **Read the issue's DoD**: Use `sl issue show <id>` to get the definition_of_done field
+   2. **Attempt automated verification** for each DoD item:
+
+   **Automated Verification Patterns**:
+
+   | Pattern | Verification Method | Example |
+   |---------|---------------------|---------|
+   | `file exists: <path>` | Check if file exists | `test -f src/auth/login.go` |
+   | `directory exists: <path>` | Check if directory exists | `test -d src/models` |
+   | `command succeeds: <cmd>` | Run command, check exit code | `go build ./...` |
+   | `tests pass` | Run test suite | `go test ./...` |
+   | `syntax valid: <file>` | Run linter | `golangci-lint run <file>` |
+   | `no errors in <file>` | Parse for error patterns | `! grep -q "error" file.log` |
+
+   3. **Interactive fallback**: For items that cannot be verified automatically:
+      - Prompt user: "Is '<item>' complete? (y/n)"
+      - Wait for response
+      - Record the response
+
+   4. **Handle verification failures**:
+      - Display failed items with specific reasons
+      - Example: "DoD item failed: 'file exists: src/missing.go' - File not found"
+      - Require explicit `--force` confirmation to proceed
+      - Log verification results for audit trail
+
+   5. **Verification result display**:
+      ```
+      DoD Verification Results for SL-xxxxx:
+      ✓ file exists: src/auth/login.go
+      ✓ tests pass
+      ✗ syntax valid: src/auth/login.go - 2 linting errors
+      ? User confirmed: Is 'UI is intuitive' complete? → yes
+
+      2/3 automated checks passed. 1 interactive confirmation.
+      Proceed with closing? (--force required)
+      ```
+
 10. Completion validation:
    - Verify all required tasks are completed
    - Check that implemented features match the original specification
@@ -153,11 +194,36 @@ Use the built-in `sl issue` commands for issue management:
 
 ## Definition of Done
 
-Before closing an issue, verify the Definition of Done criteria:
+Before closing an issue, verify the Definition of Done criteria using the verification process in step 9a:
 
-1. Check the issue's definition_of_done field
-2. Use `sl issue show <id>` to see DoD checklist
-3. Update DoD items: `sl issue update <id> --check-dod "Item text"`
-4. Only close when all DoD items are checked (or use `--force`)
+### Verification Process
+
+1. **Check the issue's definition_of_done field**: `sl issue show <id>`
+2. **Run automated verification** for patterns that can be checked programmatically
+3. **Prompt for interactive confirmation** for subjective items
+4. **Display verification results** with pass/fail status
+5. **Require `--force`** if any automated checks fail
+
+### Automated Verification Patterns
+
+| DoD Item Pattern | Command |
+|-----------------|---------|
+| File/directory exists | `test -f <path>` or `test -d <path>` |
+| Tests pass | `go test ./...` or equivalent |
+| Build succeeds | `go build ./...` or equivalent |
+| Linting passes | `golangci-lint run` or equivalent |
+
+### Interactive Confirmation
+
+For items that cannot be automated (e.g., "UI is intuitive", "Documentation is clear"):
+- Prompt the user directly
+- Record the response
+- Include in verification results
+
+### Force Close
+
+If verification fails but the issue should still be closed:
+- Use `sl issue close <id> --reason "Completed" --force`
+- Document the reason for bypassing DoD
 
 Note: This command assumes a complete task breakdown exists in tasks.md. If tasks are incomplete or missing, suggest running `/specledger.tasks` first to regenerate the task list.

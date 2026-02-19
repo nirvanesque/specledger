@@ -107,6 +107,24 @@ Given that feature description, do this:
        - Example: Reading API contracts from other teams, referencing industry standards, shared design documents
     10. Return: SUCCESS (spec ready for planning)
 
+4a. **Dependency Detection** (explicit syntax):
+    - Before generating the spec, scan the user description for dependency references using explicit syntax patterns:
+      - `deps:alias-name` - Standard dependency reference
+      - `@alias-name` - Alternative shorthand syntax
+    - For each detected dependency reference:
+      1. Run `sl deps list` to check if the dependency exists in the project
+      2. If the dependency exists:
+         - Load content from the cache at `~/.specledger/cache/<alias>/`
+         - Include relevant context from the dependency in the spec generation
+         - Reference the dependency in the spec's "Dependencies & Assumptions" section
+      3. If the dependency is not found:
+         - Display: "Dependency '<alias>' not found. Use 'sl deps add --alias <alias> <source>' to add it."
+         - Continue with spec generation (dependency reference will be noted but content won't be loaded)
+    - Examples of dependency references in feature descriptions:
+      - "Create feature using deps:api-contracts for payment integration"
+      - "Build dashboard @design-system with charts"
+    - After resolving all dependency references, continue with step 5
+
 5. Write the specification to SPEC_FILE using the template structure, replacing placeholders with concrete details derived from the feature description (arguments) while preserving section order and headings.
 
 6. **Specification Quality Validation**: After writing the initial spec, validate it against quality criteria:
