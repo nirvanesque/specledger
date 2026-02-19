@@ -5,6 +5,15 @@
 **Status**: Draft
 **Input**: User description: "update specledger prompts (both in .claude and embedded) - specledger.specify: utilize dependency (sl deps) if referred by user, specledger.tasks: fix sl issue link/create errors, utilize definition of done, make issues more descriptive, specledger.implement: check definition of done and acceptance criteria"
 
+## Clarifications
+
+### Session 2026-02-20
+
+- Q: How should the /specledger.specify command detect dependency references in user descriptions? → A: Explicit syntax only (e.g., `deps:alias-name` or `@dependency`)
+- Q: How should the /specledger.implement command verify Definition of Done items before closing issues? → A: Automated where possible (verify programmatically), fall back to interactive for others
+- Q: What level of error detail should be provided when sl issue create/link commands fail? → A: Automatically fix errors when possible, retry with corrected parameters
+- Q: Should /specledger.tasks fill definition_of_done for generated issues? → A: Yes, populate DoD items from acceptance criteria in spec.md
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Reference Dependencies During Specification (Priority: P1)
@@ -17,9 +26,9 @@ As a developer creating a feature specification, when I mention external specifi
 
 **Acceptance Scenarios**:
 
-1. **Given** a user creates a spec mentioning "integrate with company-design-system", **When** the design system dependency exists via `sl deps`, **Then** the spec generation should load and reference relevant context from that dependency
-2. **Given** a user creates a spec mentioning an unknown dependency, **When** no matching dep exists, **Then** the system should prompt "I noticed you mentioned 'X'. Would you like to add this as a dependency using 'sl deps add'?"
-3. **Given** a user explicitly references a dependency alias like "using deps:api-contracts", **When** the dependency exists, **Then** load the content and include relevant context in the spec
+1. **Given** a user creates a spec with explicit syntax `deps:api-contracts`, **When** the dependency exists via `sl deps`, **Then** the spec generation should load and reference relevant context from that dependency
+2. **Given** a user references a dependency using `@dependency-alias` syntax, **When** the dependency exists, **Then** load the content and include relevant context in the spec
+3. **Given** a user explicitly references a dependency that doesn't exist, **When** no matching dep is found, **Then** the system should display: "Dependency 'X' not found. Use 'sl deps add --alias X <source>' to add it."
 
 ---
 
@@ -34,8 +43,9 @@ As a developer running `/specledger.tasks`, I want the generated issues to be de
 **Acceptance Scenarios**:
 
 1. **Given** a plan.md with clear components, **When** tasks are generated, **Then** each issue includes a concise title (under 80 chars), a problem statement explaining WHY, implementation details explaining HOW/WHERE, and acceptance criteria for WHAT success looks like
-2. **Given** tasks are being created, **When** the `sl issue create` command is called, **Then** it should succeed without errors (handle edge cases like special characters in descriptions)
-3. **Given** tasks need dependencies linked, **When** the `sl issue link` command is called, **Then** it should properly establish the relationship without errors
+2. **Given** tasks are being created from spec.md with acceptance criteria, **When** the `sl issue create` command is called, **Then** each issue should have definition_of_done items populated from the relevant acceptance criteria
+3. **Given** tasks are being created, **When** the `sl issue create` command is called, **Then** it should succeed without errors (automatically fix special characters, retry on transient failures)
+4. **Given** tasks need dependencies linked, **When** the `sl issue link` command is called, **Then** it should properly establish the relationship without errors
 
 ---
 
@@ -49,32 +59,33 @@ As a developer implementing tasks with `/specledger.implement`, I want the syste
 
 **Acceptance Scenarios**:
 
-1. **Given** a task with DoD items, **When** implementation is complete, **Then** the system should display the DoD checklist and verify each item before allowing the issue to be closed
-2. **Given** a task with acceptance criteria, **When** implementation is complete, **Then** the system should verify the implementation meets each acceptance criterion
-3. **Given** a task where DoD items are not checked, **When** attempting to close the issue, **Then** the system should warn about incomplete DoD items and require explicit confirmation or `--force` to proceed
+1. **Given** a task with DoD items, **When** implementation is complete, **Then** the system should attempt automated verification (e.g., file exists, tests pass, syntax valid) for applicable items
+2. **Given** DoD items that cannot be verified automatically, **When** implementation is complete, **Then** the system should prompt the user for interactive confirmation of remaining items
+3. **Given** a task where automated DoD items fail verification, **When** attempting to close the issue, **Then** the system should display which items failed and why, requiring explicit confirmation to proceed
+4. **Given** all DoD items pass (automated or confirmed), **When** closing the issue, **Then** proceed without additional prompts
 
 ---
 
 ### Edge Cases
 
-- What happens when `sl deps` references a dependency that no longer exists in the cache?
-- What happens when `sl issue create` fails due to file system errors (e.g., permissions)?
-- What happens when a dependency reference is ambiguous (multiple matching aliases)?
-- What happens when DoD items contain special characters that break parsing?
+- **Missing dependency cache**: When `sl deps` references a dependency that no longer exists in the cache, display error: "Dependency 'X' not found in cache. Run 'sl deps add --alias X <source>' to restore it."
+- **File system errors**: When `sl issue create` fails due to file system errors (e.g., permissions), display clear error message with the specific path and permission issue, then suggest remediation steps
+- **Ambiguous dependency reference**: When using explicit syntax, ambiguity is eliminated - exact alias match required
+- **Special characters in DoD items**: DoD items should be sanitized when parsed; special characters are escaped or quoted in the issue content
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
-- **FR-001**: The `/specledger.specify` command MUST detect dependency references in user-provided feature descriptions
+- **FR-001**: The `/specledger.specify` command MUST detect dependency references using explicit syntax (`deps:alias` or `@alias`)
 - **FR-002**: The `/specledger.specify` command MUST load existing dependency content from `sl deps list` cache when referenced dependencies exist
-- **FR-003**: The `/specledger.specify` command MUST prompt users to add missing dependencies when external specifications are mentioned
+- **FR-003**: The `/specledger.specify` command MUST prompt users to add missing dependencies when explicit references don't resolve
 - **FR-004**: The `/specledger.tasks` command MUST generate issues with structured content: title, problem statement (WHY), implementation details (HOW/WHERE), and acceptance criteria (WHAT)
-- **FR-005**: The `/specledger.tasks` command MUST handle `sl issue create` and `sl issue link` errors gracefully with clear error messages
-- **FR-006**: The `/specledger.tasks` command MUST include definition_of_done items in each generated task based on acceptance criteria from spec.md
-- **FR-007**: The `/specledger.implement` command MUST verify Definition of Done items before closing issues
-- **FR-008**: The `/specledger.implement` command MUST verify acceptance criteria are met before task completion
-- **FR-009**: The `/specledger.implement` command MUST require explicit confirmation when closing issues with incomplete DoD items
+- **FR-005**: The `/specledger.tasks` command MUST populate definition_of_done items in each generated issue from acceptance criteria in spec.md
+- **FR-006**: The `/specledger.tasks` command MUST handle `sl issue create` and `sl issue link` errors by automatically retrying with corrected parameters
+- **FR-007**: The `/specledger.implement` command MUST attempt automated verification of DoD items where possible (file existence, test results, syntax validation)
+- **FR-008**: The `/specledger.implement` command MUST fall back to interactive confirmation for DoD items that cannot be verified automatically
+- **FR-009**: The `/specledger.implement` command MUST display failed verification results with clear explanations before requiring explicit confirmation
 - **FR-010**: Both `.claude/commands/` and `pkg/embedded/skills/commands/` prompt files MUST be updated with the same changes
 
 ### Key Entities
