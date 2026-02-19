@@ -135,10 +135,23 @@ func (i *Issue) Validate() error {
 	if !IsValidIssueType(i.IssueType) {
 		return ErrInvalidIssueType
 	}
-	if i.SpecContext != "" && !specContextPattern.MatchString(i.SpecContext) {
+	if i.SpecContext != "" && !isValidSpecContext(i.SpecContext) {
 		return ErrInvalidSpecContext
 	}
 	return nil
+}
+
+// isValidSpecContext checks if a spec context is valid (either matches pattern or is a special directory)
+func isValidSpecContext(specContext string) bool {
+	// Allow standard spec pattern (###-name)
+	if specContextPattern.MatchString(specContext) {
+		return true
+	}
+	// Allow special directories for migrated issues
+	if specContext == "migrated" {
+		return true
+	}
+	return false
 }
 
 // IsValidStatus checks if a status is valid

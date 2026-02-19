@@ -623,6 +623,14 @@ func runIssueMigrate(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	if len(result.Warnings) > 0 {
+		fmt.Println()
+		fmt.Printf("%s %d warnings during migration\n", ui.WarningIcon(), len(result.Warnings))
+		for _, w := range result.Warnings {
+			fmt.Printf("  - %s\n", w)
+		}
+	}
+
 	if issueDryRunFlag {
 		fmt.Println()
 		fmt.Println("Dry run complete. No changes were made.")
@@ -635,9 +643,14 @@ func runIssueMigrate(cmd *cobra.Command, args []string) error {
 	fmt.Printf("  %d issues migrated\n", result.MigratedIssues)
 
 	if !issueKeepBeadsFlag && result.MigratedIssues > 0 {
-		fmt.Println("  .beads/ directory removed")
-		fmt.Println("  mise.toml updated")
-		fmt.Println("  Migration log written to specledger/.migration-log")
+		// Check if cleanup actually succeeded by checking if .beads still exists
+		if _, err := os.Stat(".beads"); os.IsNotExist(err) {
+			fmt.Println("  .beads/ directory removed")
+			fmt.Println("  mise.toml updated")
+			fmt.Println("  Migration log written to specledger/.migration-log")
+		} else {
+			fmt.Printf("  %s .beads/ directory may still exist (check warnings above)\n", ui.WarningIcon())
+		}
 	}
 
 	fmt.Println()

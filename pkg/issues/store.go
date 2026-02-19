@@ -489,8 +489,8 @@ func listSpecDirs(basePath string) ([]string, error) {
 			continue
 		}
 		name := entry.Name()
-		// Check if it matches the spec pattern (###-name)
-		if specBranchPattern.MatchString(name) {
+		// Check if it matches the spec pattern (###-name) or is a special directory
+		if specBranchPattern.MatchString(name) || name == "migrated" {
 			// Check if issues.jsonl exists
 			issuesPath := filepath.Join(basePath, name, "issues.jsonl")
 			if _, err := os.Stat(issuesPath); err == nil {

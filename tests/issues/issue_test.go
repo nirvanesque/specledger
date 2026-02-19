@@ -111,6 +111,20 @@ func TestIssue_Validate(t *testing.T) {
 			},
 			wantErr: issues.ErrInvalidSpecContext,
 		},
+		{
+			name: "migrated spec context is valid",
+			issue: &issues.Issue{
+				ID:          "SL-a3f5d8",
+				Title:       "Add validation",
+				Status:      issues.StatusOpen,
+				Priority:    1,
+				IssueType:   issues.TypeTask,
+				SpecContext: "migrated",
+				CreatedAt:   time.Now(),
+				UpdatedAt:   time.Now(),
+			},
+			wantErr: nil,
+		},
 	}
 
 	for _, tt := range tests {
