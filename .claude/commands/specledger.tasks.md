@@ -82,10 +82,11 @@ Generate actionable, dependency-ordered tasks from the implementation plan. Task
          - All carry the `spec:<feature-slug>` label
       - For each task, create with `--type task`
       - Tasks must include:
-         - `title` (short summary)
+         - `title` (short summary, under 80 characters)
          - `description` Problem statement (WHY this matters) - immutable (what to implement, where, inputs/outputs)
          - `design` HOW to build, Which files, references (can change during work)
          - `acceptance` Acceptance: WHAT success looks like (stays stable)
+         - `definition_of_done` Checklist items derived from acceptance criteria (see DoD Population section below)
          - `priority` (from story priority, 0=critical, 1=high, 2=normal, 3=low)
          - Labels:
             - `story:US1`, `story:US2`, etc. (mapped from spec.md)
@@ -167,6 +168,52 @@ The tasks.md should be immediately executable - each task must be specific enoug
    - **DO NOT generate a linear checklist** — build a **task graph** using dependencies
    - Each user story phase should be a complete, independently testable increment
 
+## Issue Content Structure
+
+Each generated issue MUST have the following structured content:
+
+| Field | Purpose | Example |
+|-------|---------|---------|
+| `title` | Concise summary (under 80 chars) | "Add user authentication to login page" |
+| `description` | WHY this matters (problem statement) | "Users cannot securely access their accounts..." |
+| `design` | HOW/WHERE to build (implementation details) | "Files: src/auth/login.go, src/models/user.go..." |
+| `acceptance` | WHAT success looks like (stable criteria) | "User can log in with valid credentials" |
+| `definition_of_done` | Checklist of verifiable items | "[ ] Login form renders, [ ] Auth validates credentials" |
+
+**Field Guidelines**:
+- `title`: Action-oriented, specific, concise
+- `description`: Explain the problem, not the solution; include context and motivation
+- `design`: Include file paths, module references, approach decisions (can evolve during implementation)
+- `acceptance`: Measurable, testable outcomes that don't change
+- `definition_of_done`: Derived from acceptance criteria, one checklist item per verifiable outcome
+
+## Definition of Done Population
+
+When creating issues, derive `definition_of_done` items from the acceptance criteria in spec.md:
+
+1. **Extract acceptance criteria**: Parse each "Then" clause from acceptance scenarios in spec.md
+2. **Convert to checklist items**: Transform each criterion into a verifiable statement
+3. **Include in issue creation**: Add items to the `definition_of_done` field
+
+**Example conversion**:
+- Spec acceptance: "Then the user can log in with valid credentials"
+- DoD item: "User can authenticate with valid username/password"
+- Spec acceptance: "Then invalid credentials show an error message"
+- DoD item: "Invalid credentials display appropriate error message"
+
+**DoD Summary in tasks.md**: After creating all issues, include a DoD Summary section in tasks.md:
+
+```markdown
+## Definition of Done Summary
+
+| Issue ID | DoD Items |
+|----------|-----------|
+| SL-xxxxx | - Item 1<br>- Item 2<br>- Item 3 |
+| SL-yyyyy | - Item 1<br>- Item 2 |
+```
+
+This provides quick visibility into verification requirements for each task.
+
 ## Label Conventions
 
 | Label                | Purpose                             |
@@ -217,3 +264,48 @@ sl issue link SL-xxxxx blocks SL-yyyyy
 - Definition of done
 - WHAT success looks like (stays stable)
 - Testing mechanism
+
+## Error Handling
+
+When `sl issue create` or `sl issue link` commands fail, handle errors gracefully:
+
+### Automatic Error Recovery
+
+1. **Sanitize special characters**: If description contains quotes, newlines, or special characters:
+   - Escape single quotes: `'` → `'\''`
+   - Escape double quotes within strings
+   - Replace literal newlines with `\n` or remove if problematic
+   - Sanitize any shell metacharacters
+
+2. **Retry with corrected parameters**:
+   - First attempt: Use original parameters
+   - If fails: Sanitize and retry once
+   - If still fails: Proceed to manual error handling
+
+3. **Report clear errors**:
+   - Display the specific error message from the CLI
+   - Identify which parameter caused the issue
+   - Suggest remediation steps
+
+### Common Error Scenarios
+
+| Error | Cause | Resolution |
+|-------|-------|------------|
+| "label format invalid" | Special characters in label | Sanitize to alphanumeric + dashes |
+| "description too long" | Field exceeds limit | Truncate with ellipsis, log warning |
+| "duplicate issue" | Same title/labels exist | Skip with warning, use `--force` if intentional |
+| "file system error" | Permissions, disk space | Display path, suggest remediation |
+
+### Example Error Handling Flow
+
+```bash
+# Attempt 1: Original command
+sl issue create --title "Feature" --description "With 'quotes'" --type task
+
+# If fails with quote error, sanitize and retry:
+sl issue create --title "Feature" --description "With '\''quotes'\''" --type task
+
+# If still failing, report and continue:
+echo "Warning: Could not create issue 'Feature'. Error: [specific error]"
+echo "Suggestion: [remediation step]"
+```
