@@ -152,27 +152,26 @@ func (r *TreeRenderer) formatIssue(issue Issue) string {
 	// Type indicator
 	if r.options.ShowType {
 		sb.WriteString(r.formatType(issue.IssueType))
-		sb.WriteString(" ")
+	}
+
+	// Priority
+	if r.options.ShowPriority {
+		sb.WriteString(r.formatPriority(issue.Priority))
 	}
 
 	// ID
+	sb.WriteString(" ")
 	sb.WriteString(issue.ID)
+
+	// Title
+	sb.WriteString(" ")
+	sb.WriteString(truncate(issue.Title, r.options.TitleWidth))
 
 	// Status indicator
 	if r.options.ShowStatus {
 		sb.WriteString(" ")
 		sb.WriteString(r.formatStatus(issue.Status))
 	}
-
-	// Priority
-	if r.options.ShowPriority {
-		sb.WriteString(" ")
-		sb.WriteString(r.formatPriority(issue.Priority))
-	}
-
-	// Title
-	sb.WriteString(" ")
-	sb.WriteString(truncate(issue.Title, r.options.TitleWidth))
 
 	// Spec context
 	if r.options.ShowSpec && issue.SpecContext != "" {
