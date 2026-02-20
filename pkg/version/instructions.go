@@ -12,7 +12,7 @@ import (
 type InstallationMethod string
 
 const (
-	MethodHomebrew InstallationMethod = "homebrew"
+	MethodHomebrew  InstallationMethod = "homebrew"
 	MethodGoInstall InstallationMethod = "go-install"
 	MethodBinary    InstallationMethod = "binary"
 )

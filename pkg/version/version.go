@@ -19,12 +19,12 @@ var (
 
 // VersionInfo represents version information from GitHub Releases API.
 type VersionInfo struct {
-	CurrentVersion  string    `json:"current_version"`   // Installed CLI version (e.g., "1.2.0")
-	LatestVersion   string    `json:"latest_version"`    // Latest available version (e.g., "1.3.0")
-	LatestURL       string    `json:"latest_url"`        // URL to release page
-	UpdateAvailable bool      `json:"update_available"`  // true if LatestVersion > CurrentVersion
-	CheckedAt       time.Time `json:"checked_at"`        // When the check was performed
-	Error           string    `json:"error,omitempty"`   // Error message if check failed
+	CurrentVersion  string    `json:"current_version"`  // Installed CLI version (e.g., "1.2.0")
+	LatestVersion   string    `json:"latest_version"`   // Latest available version (e.g., "1.3.0")
+	LatestURL       string    `json:"latest_url"`       // URL to release page
+	UpdateAvailable bool      `json:"update_available"` // true if LatestVersion > CurrentVersion
+	CheckedAt       time.Time `json:"checked_at"`       // When the check was performed
+	Error           string    `json:"error,omitempty"`  // Error message if check failed
 }
 
 // GetVersion returns the current CLI version.
