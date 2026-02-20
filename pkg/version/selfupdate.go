@@ -70,27 +70,15 @@ func SelfUpdate(ctx context.Context) error {
 
 // getDownloadURL returns the download URL for the current platform.
 func getDownloadURL(version string) (string, error) {
-	// Map GOOS to release asset naming
+	// Asset naming pattern: specledger_{version}_{os}_{arch}.tar.gz
 	osName := runtime.GOOS
 	arch := runtime.GOARCH
 
-	// Handle architecture naming
-	if arch == "amd64" {
-		arch = "x86_64"
-	} else if arch == "arm64" {
-		if osName == "darwin" {
-			arch = "arm64"
-		} else {
-			arch = "arm64"
-		}
-	}
-
-	// Asset naming pattern: sl_{version}_{os}_{arch}.tar.gz or sl_{version}_{os}_{arch}
 	var assetName string
 	if osName == "windows" {
-		assetName = fmt.Sprintf("sl_%s_%s_%s.zip", version, osName, arch)
+		assetName = fmt.Sprintf("specledger_%s_%s_%s.zip", version, osName, arch)
 	} else {
-		assetName = fmt.Sprintf("sl_%s_%s_%s.tar.gz", version, osName, arch)
+		assetName = fmt.Sprintf("specledger_%s_%s_%s.tar.gz", version, osName, arch)
 	}
 
 	return fmt.Sprintf("https://github.com/specledger/specledger/releases/download/v%s/%s", version, assetName), nil
@@ -168,7 +156,7 @@ func replaceBinary(newBinary, currentBinary string) error {
 	return nil
 }
 
-// extractTarGz extracts a tar.gz file and returns the path to the sl binary.
+// extractTarGz extracts a tar.gz file and returns the path to the binary.
 func extractTarGz(archivePath string) (string, error) {
 	// Create temp directory for extraction
 	tmpDir, err := os.MkdirTemp("", "sl-extract-*")
@@ -182,13 +170,15 @@ func extractTarGz(archivePath string) (string, error) {
 		return "", err
 	}
 
-	// Find the sl binary
-	slPath := filepath.Join(tmpDir, "sl")
-	if _, err := os.Stat(slPath); err != nil {
-		return "", fmt.Errorf("binary not found in archive")
+	// Find the binary (could be named sl or specledger)
+	for _, name := range []string{"sl", "specledger"} {
+		binaryPath := filepath.Join(tmpDir, name)
+		if _, err := os.Stat(binaryPath); err == nil {
+			return binaryPath, nil
+		}
 	}
 
-	return slPath, nil
+	return "", fmt.Errorf("binary not found in archive")
 }
 
 // copyFile copies a file from src to dst.
