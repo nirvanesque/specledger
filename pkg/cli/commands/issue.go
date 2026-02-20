@@ -729,6 +729,8 @@ func renderIssueShowTree(store *issues.Store, issue *issues.Issue) error {
 		return fmt.Errorf("failed to get dependency tree: %w", err)
 	}
 
+	renderer := issues.NewTreeRenderer(issues.DefaultTreeRenderOptions())
+
 	// Show what blocks this issue
 	if len(tree.BlockedBy) > 0 {
 		fmt.Println("Blocked by:")
@@ -738,13 +740,13 @@ func renderIssueShowTree(store *issues.Store, issue *issues.Issue) error {
 			if isLast {
 				prefix = "└── "
 			}
-			fmt.Printf("%s%s [%s] %s\n", prefix, blocker.Issue.ID, blocker.Issue.Status, truncateTitle(blocker.Issue.Title, 40))
+			fmt.Printf("%s%s\n", prefix, renderer.FormatIssueSimple(blocker.Issue))
 		}
 		fmt.Println()
 	}
 
 	// Show the issue itself (centered)
-	fmt.Printf("%s [%s] %s\n", issue.ID, issue.Status, issue.Title)
+	fmt.Printf("%s\n", renderer.FormatIssueSimple(*issue))
 	fmt.Println()
 
 	// Show what this issue blocks
@@ -756,7 +758,7 @@ func renderIssueShowTree(store *issues.Store, issue *issues.Issue) error {
 			if isLast {
 				prefix = "└── "
 			}
-			fmt.Printf("%s%s [%s] %s\n", prefix, blocked.Issue.ID, blocked.Issue.Status, truncateTitle(blocked.Issue.Title, 40))
+			fmt.Printf("%s%s\n", prefix, renderer.FormatIssueSimple(blocked.Issue))
 		}
 	}
 

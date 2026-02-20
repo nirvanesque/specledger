@@ -5,21 +5,39 @@ import (
 	"strings"
 )
 
+// ANSI color codes
+const (
+	colorReset  = "\033[0m"
+	colorRed    = "\033[31m"
+	colorGreen  = "\033[32m"
+	colorYellow = "\033[33m"
+	colorBlue   = "\033[34m"
+	colorPurple = "\033[35m"
+	colorCyan   = "\033[36m"
+	colorGray   = "\033[90m"
+)
+
 // TreeRenderOptions configures the tree output format
 type TreeRenderOptions struct {
-	MaxDepth   int  // Maximum depth to render (default: 10)
-	ShowStatus bool // Include status indicator (default: true)
-	TitleWidth int  // Max title width before truncation (default: 40)
-	ShowSpec   bool // Show spec context for cross-spec trees (default: false)
+	MaxDepth    int  // Maximum depth to render (default: 10)
+	ShowStatus  bool // Include status indicator (default: true)
+	TitleWidth  int  // Max title width before truncation (default: 40)
+	ShowSpec    bool // Show spec context for cross-spec trees (default: false)
+	ShowType    bool // Show issue type (default: true)
+	ShowPriority bool // Show priority (default: true)
+	Color       bool // Use colors (default: true)
 }
 
 // DefaultTreeRenderOptions returns the default options
 func DefaultTreeRenderOptions() TreeRenderOptions {
 	return TreeRenderOptions{
-		MaxDepth:   10,
-		ShowStatus: true,
-		TitleWidth: 40,
-		ShowSpec:   false,
+		MaxDepth:     10,
+		ShowStatus:   true,
+		TitleWidth:   40,
+		ShowSpec:     false,
+		ShowType:     true,
+		ShowPriority: true,
+		Color:        true,
 	}
 }
 
@@ -44,21 +62,119 @@ func truncate(s string, maxLen int) string {
 	return s[:maxLen-3] + "..."
 }
 
+// colorize applies color if enabled
+func (r *TreeRenderer) colorize(text, color string) string {
+	if !r.options.Color {
+		return text
+	}
+	return color + text + colorReset
+}
+
+// formatPriority returns a colored priority indicator
+func (r *TreeRenderer) formatPriority(priority int) string {
+	var indicator string
+	var color string
+
+	switch priority {
+	case 0:
+		indicator = "P0"
+		color = colorRed
+	case 1:
+		indicator = "P1"
+		color = colorYellow
+	case 2:
+		indicator = "P2"
+		color = colorGreen
+	case 3:
+		indicator = "P3"
+		color = colorCyan
+	default:
+		indicator = fmt.Sprintf("P%d", priority)
+		color = colorGray
+	}
+
+	return r.colorize(indicator, color)
+}
+
+// formatType returns a colored type indicator
+func (r *TreeRenderer) formatType(issueType IssueType) string {
+	var indicator string
+	var color string
+
+	switch issueType {
+	case TypeEpic:
+		indicator = "◆"
+		color = colorPurple
+	case TypeFeature:
+		indicator = "★"
+		color = colorBlue
+	case TypeTask:
+		indicator = "●"
+		color = colorGreen
+	case TypeBug:
+		indicator = "✗"
+		color = colorRed
+	default:
+		indicator = "○"
+		color = colorGray
+	}
+
+	return r.colorize(indicator, color)
+}
+
+// formatStatus returns a colored status indicator
+func (r *TreeRenderer) formatStatus(status IssueStatus) string {
+	var indicator string
+	var color string
+
+	switch status {
+	case StatusOpen:
+		indicator = "○"
+		color = colorGreen
+	case StatusInProgress:
+		indicator = "◐"
+		color = colorYellow
+	case StatusClosed:
+		indicator = "●"
+		color = colorGray
+	default:
+		indicator = "?"
+		color = colorGray
+	}
+
+	return r.colorize(indicator, color)
+}
+
 // formatIssue formats an issue for display in the tree
 func (r *TreeRenderer) formatIssue(issue Issue) string {
 	var sb strings.Builder
 
-	sb.WriteString(issue.ID)
-
-	if r.options.ShowStatus {
-		sb.WriteString(" [")
-		sb.WriteString(string(issue.Status))
-		sb.WriteString("]")
+	// Type indicator
+	if r.options.ShowType {
+		sb.WriteString(r.formatType(issue.IssueType))
+		sb.WriteString(" ")
 	}
 
+	// ID
+	sb.WriteString(issue.ID)
+
+	// Status indicator
+	if r.options.ShowStatus {
+		sb.WriteString(" ")
+		sb.WriteString(r.formatStatus(issue.Status))
+	}
+
+	// Priority
+	if r.options.ShowPriority {
+		sb.WriteString(" ")
+		sb.WriteString(r.formatPriority(issue.Priority))
+	}
+
+	// Title
 	sb.WriteString(" ")
 	sb.WriteString(truncate(issue.Title, r.options.TitleWidth))
 
+	// Spec context
 	if r.options.ShowSpec && issue.SpecContext != "" {
 		sb.WriteString(" (")
 		sb.WriteString(issue.SpecContext)
@@ -66,6 +182,11 @@ func (r *TreeRenderer) formatIssue(issue Issue) string {
 	}
 
 	return sb.String()
+}
+
+// FormatIssueSimple is a public method to format an issue for display
+func (r *TreeRenderer) FormatIssueSimple(issue Issue) string {
+	return r.formatIssue(issue)
 }
 
 // Render renders a single dependency tree
