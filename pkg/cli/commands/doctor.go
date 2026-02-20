@@ -5,11 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"time"
 
 	"github.com/specledger/specledger/pkg/cli/metadata"
 	"github.com/specledger/specledger/pkg/cli/prerequisites"
+	"github.com/specledger/specledger/pkg/cli/tui"
 	"github.com/specledger/specledger/pkg/cli/ui"
+	"github.com/specledger/specledger/pkg/templates"
 	"github.com/specledger/specledger/pkg/version"
 	"github.com/spf13/cobra"
 )
@@ -134,6 +137,15 @@ func outputDoctorJSON(check prerequisites.PrerequisiteCheck) error {
 		}
 	}
 
+	// Add template version info
+	projectDir, _ := os.Getwd()
+	templateStatus, _ := templates.CheckTemplateStatus(projectDir, version.GetVersion())
+	if templateStatus != nil && templateStatus.InProject {
+		output.TemplateVersion = templateStatus.ProjectTemplateVersion
+		output.TemplateUpdateAvailable = templateStatus.UpdateAvailable
+		output.TemplateCustomizedFiles = templateStatus.CustomizedFiles
+	}
+
 	// Marshal and print JSON
 	jsonBytes, err := json.MarshalIndent(output, "", "  ")
 	if err != nil {
@@ -192,6 +204,75 @@ func outputDoctorHuman(check prerequisites.PrerequisiteCheck) error {
 	}
 	fmt.Println()
 
+	// Template status section (only if in a project)
+	projectDir, _ := os.Getwd()
+	templateStatus, _ := templates.CheckTemplateStatus(projectDir, cliVersion)
+	if templateStatus != nil && templateStatus.InProject {
+		fmt.Println(ui.Bold("Project Templates"))
+		fmt.Println(ui.Cyan("─────────────────"))
+		fmt.Println()
+
+		if templateStatus.ProjectTemplateVersion == "" {
+			fmt.Printf("  ⚠  Templates: %s\n", ui.Yellow("(version unknown)"))
+		} else if templateStatus.UpdateAvailable {
+			fmt.Printf("  ⚠  Templates: %s %s\n",
+				ui.Dim(fmt.Sprintf("v%s", templateStatus.ProjectTemplateVersion)),
+				ui.Yellow(fmt.Sprintf("(CLI: v%s)", cliVersion)))
+		} else {
+			fmt.Printf("  %s Templates: %s\n", ui.Checkmark(), ui.Green("current"))
+		}
+
+		if len(templateStatus.CustomizedFiles) > 0 {
+			fmt.Printf("  %s Customized files: %d\n", ui.Dim("ℹ"), len(templateStatus.CustomizedFiles))
+		}
+
+		// Offer template update if needed
+		if templateStatus.NeedsUpdate {
+			fmt.Println()
+			fmt.Printf("  %s Template update available!\n", ui.Yellow("⚠"))
+
+			// Show warning about uncommitted changes
+			if hasUncommittedChanges(projectDir) {
+				fmt.Printf("  %s Warning: Uncommitted changes in .claude/\n", ui.Yellow("⚠"))
+			}
+
+			// Show warning about customized files
+			if len(templateStatus.CustomizedFiles) > 0 {
+				fmt.Printf("  %s %d customized files will be skipped:\n", ui.Dim("ℹ"), len(templateStatus.CustomizedFiles))
+				for _, f := range templateStatus.CustomizedFiles {
+					if len(f) > 40 {
+						f = "..." + f[len(f)-37:]
+					}
+					fmt.Printf("      • %s\n", ui.Dim(f))
+				}
+			}
+
+			fmt.Println()
+
+			// Prompt for update (skip in non-interactive mode)
+			mode := tui.NewModeDetector()
+			if mode.IsInteractive() {
+				confirm, err := tui.ConfirmPrompt("  Update templates? [y/N]: ")
+				if err == nil && confirm {
+					fmt.Println()
+					result, err := templates.UpdateTemplates(projectDir, cliVersion)
+					if err != nil {
+						fmt.Printf("  %s Update failed: %v\n", ui.Red("✗"), err)
+					} else {
+						fmt.Printf("  %s Updated %d templates\n", ui.Checkmark(), len(result.Updated))
+						if len(result.Skipped) > 0 {
+							fmt.Printf("  %s Skipped %d customized files\n", ui.Dim("ℹ"), len(result.Skipped))
+						}
+						fmt.Printf("  %s Template version updated to %s\n", ui.Checkmark(), cliVersion)
+					}
+				} else {
+					fmt.Println("  Skipping template update.")
+				}
+			}
+		}
+		fmt.Println()
+	}
+
 	// Framework tools section
 	fmt.Println(ui.Bold("SDD Framework Tools"))
 	fmt.Println(ui.Cyan("──────────────────"))
@@ -227,8 +308,7 @@ func outputDoctorHuman(check prerequisites.PrerequisiteCheck) error {
 	fmt.Println()
 
 	// Check if we're in a SpecLedger project and show framework init commands
-	projectDir, err := os.Getwd()
-	if err == nil && metadata.HasYAMLMetadata(projectDir) {
+	if metadata.HasYAMLMetadata(projectDir) {
 		meta, loadErr := metadata.LoadFromProject(projectDir)
 		if loadErr == nil {
 			showFrameworkInitCommands(check, meta)
@@ -254,4 +334,17 @@ func outputDoctorHuman(check prerequisites.PrerequisiteCheck) error {
 func showFrameworkInitCommands(check prerequisites.PrerequisiteCheck, meta *metadata.ProjectMetadata) {
 	// Framework initialization commands are no longer needed
 	// as we use playbooks instead of frameworks
+}
+
+// hasUncommittedChanges checks if there are uncommitted changes in .claude/ directory
+func hasUncommittedChanges(projectDir string) bool {
+	// Run git status to check for uncommitted changes in .claude/
+	// This is a simple check - we just check if there are any changes
+	cmd := exec.Command("git", "status", "--porcelain", ".claude/")
+	cmd.Dir = projectDir
+	output, err := cmd.Output()
+	if err != nil {
+		return false // If git fails, assume no uncommitted changes
+	}
+	return len(output) > 0
 }
