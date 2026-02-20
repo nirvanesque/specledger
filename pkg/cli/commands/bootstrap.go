@@ -200,6 +200,14 @@ func runBootstrapInteractive(l *logger.Logger, cfg *config.Config) error {
 		return err
 	}
 
+	// Apply template-specific project structure (separate from playbook)
+	templateID := answers["template"]
+	if templateID != "" {
+		if _, err := applyTemplateFiles(projectPath, templateID); err != nil {
+			ui.PrintWarning(fmt.Sprintf("Template application issue: %v", err))
+		}
+	}
+
 	// Write populated constitution with selected principles
 	constitutionPath := filepath.Join(projectPath, ".specledger", "memory", "constitution.md")
 	agentPref := answers["agent_preference"]
@@ -236,7 +244,7 @@ func runBootstrapInteractive(l *logger.Logger, cfg *config.Config) error {
 	}
 
 	// Update metadata with template and agent selections
-	templateID := answers["template"]
+	// templateID was already set above when applying template files
 	if templateID != "" || agentID != "" {
 		projectMetadata, err := metadata.LoadFromProject(projectPath)
 		if err == nil {
@@ -330,6 +338,15 @@ func runBootstrapNonInteractive(cmd *cobra.Command, l *logger.Logger, cfg *confi
 		return err
 	}
 
+	// Apply template-specific project structure
+	templateID := templateFlag
+	if templateID == "" {
+		templateID = "general-purpose" // Default template
+	}
+	if _, err := applyTemplateFiles(projectPath, templateID); err != nil {
+		ui.PrintWarning(fmt.Sprintf("Template application issue: %v", err))
+	}
+
 	// Use agent from flag or default to "none" in CI mode
 	agentID := agentFlag
 	if agentID == "" {
@@ -352,10 +369,7 @@ func runBootstrapNonInteractive(cmd *cobra.Command, l *logger.Logger, cfg *confi
 	}
 
 	// Update metadata with template and agent selections
-	templateID := templateFlag
-	if templateID == "" {
-		templateID = "general-purpose" // Default template
-	}
+	// templateID was already set above when applying template files
 	if templateID != "" || agentID != "" {
 		projectMetadata, err := metadata.LoadFromProject(projectPath)
 		if err == nil {

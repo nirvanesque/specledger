@@ -80,9 +80,9 @@ func TestTransformTemplateContent(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := transformTemplateContent(tt.destPath, []byte(tt.content))
+			result := TransformTemplateContent(tt.destPath, []byte(tt.content))
 			if string(result) != tt.expected {
-				t.Errorf("transformTemplateContent(%q, %q) = %q, want %q",
+				t.Errorf("TransformTemplateContent(%q, %q) = %q, want %q",
 					tt.destPath, tt.content, string(result), tt.expected)
 			}
 		})

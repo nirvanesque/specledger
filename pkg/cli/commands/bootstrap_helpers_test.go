@@ -122,3 +122,95 @@ func TestSetupAgentConfig_Empty(t *testing.T) {
 		t.Errorf("expected no files/directories for empty agent, got %d", len(entries))
 	}
 }
+
+func TestApplyTemplateFiles_GeneralPurpose(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "specledger-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// general-purpose should not copy any additional files
+	count, err := applyTemplateFiles(tmpDir, "general-purpose")
+	if err != nil {
+		t.Fatalf("applyTemplateFiles failed: %v", err)
+	}
+
+	if count != 0 {
+		t.Errorf("expected 0 files for general-purpose, got %d", count)
+	}
+}
+
+func TestApplyTemplateFiles_BatchData(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "specledger-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// batch-data should copy template files
+	count, err := applyTemplateFiles(tmpDir, "batch-data")
+	if err != nil {
+		t.Fatalf("applyTemplateFiles failed: %v", err)
+	}
+
+	if count == 0 {
+		t.Error("expected files to be copied for batch-data template")
+	}
+
+	// Verify key directories exist
+	expectedDirs := []string{"workflows", "cmd/worker", "cmd/starter"}
+	for _, dir := range expectedDirs {
+		path := filepath.Join(tmpDir, dir)
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			t.Errorf("expected directory missing: %s", dir)
+		}
+	}
+
+	// Verify go.mod was created (transformed from go.mod.template)
+	goModPath := filepath.Join(tmpDir, "go.mod")
+	if _, err := os.Stat(goModPath); os.IsNotExist(err) {
+		t.Error("go.mod should be created from go.mod.template")
+	}
+}
+
+func TestApplyTemplateFiles_FullStack(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "specledger-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// full-stack should copy template files
+	count, err := applyTemplateFiles(tmpDir, "full-stack")
+	if err != nil {
+		t.Fatalf("applyTemplateFiles failed: %v", err)
+	}
+
+	if count == 0 {
+		t.Error("expected files to be copied for full-stack template")
+	}
+
+	// Verify key directories exist
+	expectedDirs := []string{"frontend", "frontend/src"}
+	for _, dir := range expectedDirs {
+		path := filepath.Join(tmpDir, dir)
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			t.Errorf("expected directory missing: %s", dir)
+		}
+	}
+}
+
+func TestApplyTemplateFiles_Unknown(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "specledger-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Unknown template should return error
+	_, err = applyTemplateFiles(tmpDir, "nonexistent-template")
+	if err == nil {
+		t.Error("expected error for unknown template")
+	}
+}

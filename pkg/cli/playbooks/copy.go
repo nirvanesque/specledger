@@ -205,7 +205,7 @@ func copyEmbeddedFile(src, dest string) error {
 	}
 
 	// Transform content for Go template files
-	content := transformTemplateContent(dest, srcFile)
+	content := TransformTemplateContent(dest, srcFile)
 
 	// Determine permissions based on file type
 	var perms fs.FileMode
@@ -219,10 +219,11 @@ func copyEmbeddedFile(src, dest string) error {
 	return os.WriteFile(dest, content, perms)
 }
 
-// transformTemplateContent transforms file content based on file type.
+// TransformTemplateContent transforms file content based on file type.
 // For Go files in templates, removes the //go:build ignore directive that was
 // added to prevent compilation during embedding.
-func transformTemplateContent(destPath string, content []byte) []byte {
+// Exported for use by bootstrap_helpers.go when copying template files.
+func TransformTemplateContent(destPath string, content []byte) []byte {
 	// Only transform .go files
 	if !strings.HasSuffix(destPath, ".go") {
 		return content

@@ -185,6 +185,97 @@ func setupSpecLedgerProject(projectPath, projectName, shortCode, playbookName st
 	return selectedPlaybookName, playbookVersion, playbookStructure, nil
 }
 
+// applyTemplateFiles copies template-specific project structure files to the project directory.
+// This is separate from playbooks - templates provide the project structure (backend/, frontend/, etc.)
+// while playbooks provide SpecLedger infrastructure (.claude/, .specledger/, etc.).
+// Returns the number of files copied.
+func applyTemplateFiles(projectPath, templateID string) (int, error) {
+	if templateID == "" || templateID == "general-purpose" {
+		// general-purpose uses the specledger playbook structure directly
+		// No additional template files to copy
+		slog.Info("using general-purpose template (specledger playbook)", "template", templateID)
+		return 0, nil
+	}
+
+	// Get template definition to find path
+	template, err := playbooks.GetTemplateByID(templateID)
+	if err != nil {
+		return 0, fmt.Errorf("unknown template: %s", templateID)
+	}
+
+	// Template path in embedded FS
+	templateDir := filepath.Join("templates", template.Path)
+
+	filesCopied := 0
+	err = fs.WalkDir(embedded.TemplatesFS, templateDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Get relative path from template dir
+		relPath, err := filepath.Rel(templateDir, path)
+		if err != nil {
+			return err
+		}
+
+		// Skip root directory
+		if relPath == "." {
+			return nil
+		}
+
+		destPath := filepath.Join(projectPath, relPath)
+
+		if d.IsDir() {
+			return os.MkdirAll(destPath, 0755)
+		}
+
+		// Skip files that already exist (don't overwrite playbook files)
+		if _, err := os.Stat(destPath); err == nil {
+			slog.Debug("skipping existing file", "path", destPath)
+			return nil
+		}
+
+		// Read file from embedded FS
+		content, err := embedded.TemplatesFS.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("failed to read template file %s: %w", path, err)
+		}
+
+		// Transform template content (remove //go:build ignore, rename go.mod.template)
+		content = playbooks.TransformTemplateContent(destPath, content)
+
+		// Handle go.mod.template -> go.mod rename
+		if strings.HasSuffix(destPath, "go.mod.template") {
+			destPath = strings.TrimSuffix(destPath, ".template")
+		}
+
+		// Ensure parent directory exists
+		if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+			return fmt.Errorf("failed to create directory for %s: %w", destPath, err)
+		}
+
+		// Write file
+		if err := os.WriteFile(destPath, content, 0644); err != nil {
+			return fmt.Errorf("failed to write template file %s: %w", destPath, err)
+		}
+
+		filesCopied++
+		slog.Debug("copied template file", "dest", destPath)
+		return nil
+	})
+
+	if err != nil {
+		return filesCopied, fmt.Errorf("failed to apply template %s: %w", templateID, err)
+	}
+
+	if filesCopied > 0 {
+		slog.Info("template files applied", "template", templateID, "files", filesCopied)
+		fmt.Printf("%s Template '%s' applied (%d files)\n", ui.Checkmark(), template.Name, filesCopied)
+	}
+
+	return filesCopied, nil
+}
+
 // mapAgentPreferenceToID maps legacy agent preference names to agent IDs.
 // This provides backward compatibility with older TUI versions.
 func mapAgentPreferenceToID(agentPref string) string {
