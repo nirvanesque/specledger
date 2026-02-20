@@ -57,6 +57,23 @@ As a developer investigating a specific issue, I want to see its dependency tree
 
 ---
 
+### User Story 4 - Auto-Select Ready Tasks in Implement Workflow (Priority: P2)
+
+As a developer running the implementation workflow, I want the system to automatically identify and present ready-to-work tasks (not blocked by dependencies) so that I can focus on actionable work without manually checking dependencies.
+
+**Why this priority**: This integrates the ready state into the core implementation workflow, reducing cognitive load and ensuring developers always work on unblocked tasks.
+
+**Independent Test**: Can be fully tested by running `/specledger.implement` on a spec with issues having various dependency states and verifying that only unblocked issues are presented for selection.
+
+**Acceptance Scenarios**:
+
+1. **Given** the implementation workflow starts, **When** tasks are loaded from tasks.md, **Then** the system queries `sl issue ready` to identify which tasks are unblocked
+2. **Given** there are ready tasks available, **When** the workflow presents task options, **Then** only ready tasks are shown as selectable options
+3. **Given** all tasks are blocked, **When** the workflow runs, **Then** a message explains that no tasks are ready and lists blocking issues
+4. **Given** a task is selected and completed, **When** the workflow continues, **Then** newly unblocked tasks become available for selection
+
+---
+
 ### Edge Cases
 
 - What happens when there are cyclic dependencies? Display warning and show cycle in tree
@@ -78,6 +95,10 @@ As a developer investigating a specific issue, I want to see its dependency tree
 - **FR-008**: System MUST enhance `sl issue show --tree` to display the issue's dependency context (what it blocks, what blocks it)
 - **FR-009**: Tree view MUST detect and warn about cyclic dependencies without crashing
 - **FR-010**: System MUST respect existing filters (status, type, priority, label, spec) when combined with `--tree`
+- **FR-011**: The `/specledger.implement` workflow MUST query ready issues before presenting task options
+- **FR-012**: The implementation workflow MUST only present tasks that are not blocked by open dependencies
+- **FR-013**: When all tasks are blocked, the workflow MUST display a message explaining why no tasks are available and list the blocking issues
+- **FR-014**: After completing a task, the workflow MUST re-evaluate ready state to identify newly unblocked tasks
 
 ### Key Entities
 
@@ -94,6 +115,7 @@ As a developer investigating a specific issue, I want to see its dependency tree
 - **SC-003**: 100% of open issues with closed blockers appear in `sl issue ready` output
 - **SC-004**: Zero false positives in ready list (no blocked issues shown as ready)
 - **SC-005**: Tree view command completes in under 2 seconds for specs with up to 100 issues
+- **SC-006**: Implementation workflow never presents a blocked task as selectable option
 
 ### Previous work
 
