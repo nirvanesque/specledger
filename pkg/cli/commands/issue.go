@@ -492,56 +492,87 @@ func renderSingleSpecTree(issueList []issues.Issue, store *issues.Store, specCon
 	return nil
 }
 
-// renderCrossSpecTree renders issues grouped by spec in tree format
+// renderCrossSpecTree renders issues with dependency relationships across all specs
 func renderCrossSpecTree(issueList []issues.Issue, artifactPath string) error {
-	// Group issues by spec
-	specIssues := make(map[string][]issues.Issue)
-	for _, issue := range issueList {
-		specIssues[issue.SpecContext] = append(specIssues[issue.SpecContext], issue)
+	// Build a global issue map for cross-spec dependency resolution
+	issueMap := make(map[string]*issues.Issue)
+	blocked := make(map[string]bool)
+
+	for i := range issueList {
+		issueMap[issueList[i].ID] = &issueList[i]
 	}
 
-	// Create renderer for formatting
+	// Mark issues that are blocked by others
+	for _, issue := range issueList {
+		for _, blockerID := range issue.BlockedBy {
+			if _, exists := issueMap[blockerID]; exists {
+				blocked[issue.ID] = true
+			}
+		}
+	}
+
+	// Build dependency trees from root issues (not blocked by anything)
+	var trees []*issues.DependencyTree
+	for _, issue := range issueList {
+		if !blocked[issue.ID] {
+			tree := buildCrossSpecDependencyTree(issue.ID, issueMap, make(map[string]bool))
+			trees = append(trees, tree)
+		}
+	}
+
+	// Create renderer with spec context enabled
 	opts := issues.DefaultTreeRenderOptions()
-	opts.ShowSpec = false // Already grouped by spec
+	opts.ShowSpec = true
 	renderer := issues.NewTreeRenderer(opts)
 
-	fmt.Println("All Specs")
-	specNames := make([]string, 0, len(specIssues))
-	for spec := range specIssues {
-		specNames = append(specNames, spec)
+	// Check for cycles
+	cycles := issues.DetectCycles(trees)
+
+	// Output
+	var output strings.Builder
+
+	if len(cycles) > 0 {
+		output.WriteString(issues.FormatCycleWarning(cycles))
 	}
 
-	for specIdx, spec := range specNames {
-		issues := specIssues[spec]
-		isLastSpec := specIdx == len(specNames)-1
+	// Render all trees under a root label
+	output.WriteString(renderer.RenderWithRoot("All Specs", trees, len(issueList)))
 
-		if isLastSpec {
-			fmt.Printf("└── %s (%d issues)\n", spec, len(issues))
-		} else {
-			fmt.Printf("├── %s (%d issues)\n", spec, len(issues))
-		}
-
-		for i, issue := range issues {
-			isLast := i == len(issues)-1
-			var prefix string
-			if isLastSpec {
-				if isLast {
-					prefix = "    └── "
-				} else {
-					prefix = "    ├── "
-				}
-			} else {
-				if isLast {
-					prefix = "│   └── "
-				} else {
-					prefix = "│   ├── "
-				}
-			}
-			fmt.Printf("%s%s\n", prefix, renderer.FormatIssueSimple(issue))
-		}
-	}
-
+	fmt.Print(output.String())
 	return nil
+}
+
+// buildCrossSpecDependencyTree recursively builds a dependency tree across specs
+func buildCrossSpecDependencyTree(issueID string, issueMap map[string]*issues.Issue, visited map[string]bool) *issues.DependencyTree {
+	issue, exists := issueMap[issueID]
+	if !exists {
+		return &issues.DependencyTree{Issue: issues.Issue{ID: issueID}}
+	}
+
+	// Handle cycles
+	if visited[issueID] {
+		return &issues.DependencyTree{Issue: *issue}
+	}
+	visited[issueID] = true
+	defer func() { delete(visited, issueID) }()
+
+	tree := &issues.DependencyTree{Issue: *issue}
+
+	// Find issues that this issue blocks (issues that have this issue in their BlockedBy)
+	for id, other := range issueMap {
+		if id == issueID {
+			continue
+		}
+		for _, blockerID := range other.BlockedBy {
+			if blockerID == issueID {
+				childTree := buildCrossSpecDependencyTree(id, issueMap, visited)
+				tree.Blocks = append(tree.Blocks, childTree)
+				break
+			}
+		}
+	}
+
+	return tree
 }
 
 // truncateTitle truncates a title to maxLen characters
