@@ -235,8 +235,13 @@ Fixture file format:
 Flags:
 - `--auto <fixture.json>`: Non-interactive mode. Match comments by `file_path` + `selected_text`, generate prompt, print to **stdout**, exit. No agent launch, no resolution. Deterministic output enables **snapshot testing**.
 - `--dry-run`: Interactive mode variant. Goes through the full interactive flow (select, process, edit) but writes prompt to a file instead of launching the agent. No resolution.
+- `--summary`: Compact non-interactive listing of unresolved comments to stdout. One line per comment: `file_path:line  "selected_text"  (author)`. On auth failure, exits silently (exit code 1, no stdout). Designed for agent integration (e.g., `/specledger.clarify` prompt calls `sl revise --summary`).
 
 In `--auto` mode, steps 7-8 are fixture-driven and step 12 prints to stdout and exits. All subsequent steps (editor, agent, commit, resolve) are skipped.
+
+### 9. Post-Agent: No Changes on Disk
+
+When the agent exits with no uncommitted file changes (agent committed itself, or no changes were needed), skip the commit/push step and proceed directly to comment resolution. The user should always be prompted to resolve comments regardless of whether files changed.
 
 ### 8. Full Command Flow
 
@@ -257,13 +262,22 @@ In `--auto` mode, steps 7-8 are fixture-driven and step 12 prints to stdout and 
 14. Confirm/re-edit/cancel prompt (huh confirm)
 15. If --dry-run → prompt for filename to write to → exit
 16. Launch agent OR prompt for filename to write to
-17. Post-agent: show git status summary
-18. Offer commit + push (huh confirm)
+17. Post-agent: check git status
+18. If changes on disk → show summary + offer commit/push (huh confirm)
+18a. If no changes on disk → skip commit/push, proceed to resolve
 19. Refresh auth token (auto-retry handles this transparently)
 20. Comment resolution multi-select (huh form)
 21. Resolve selected comments (PATCH API) [auto-retry on 401]
 22. Session end (stash pop reminder if applicable)
 ```
+
+## Future Enhancements
+
+Items identified during review feedback, deferred from this sprint:
+
+- **Agent-generated commit messages**: Let the coding agent suggest a commit message based on the changes it made. Nice to have but hard to implement — requires agent output parsing or a protocol for the agent to communicate the message back.
+- **Export resolve file on auth expiry**: When the refresh token is also expired during the resolve step, export a JSON file listing comments to resolve. The user can re-authenticate and run `sl revise --auto resolve-file.json` to complete resolution.
+- **Multi-pane TUI**: Rich TUI with artifact tree (left), comment detail (right), controls (bottom), and free navigation between views. See research.md R11 for design notes and reference implementations.
 
 ## Complexity Tracking
 

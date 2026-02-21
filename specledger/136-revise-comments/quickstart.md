@@ -53,6 +53,9 @@ sl revise 009-feature-name
 # ✓ Found 6 unresolved comments across 3 artifacts
 ```
 
+> **Note:** If the specified branch differs from your current branch, stash handling
+> applies (see [Branch Switching (US7)](#branch-switching-us7) below).
+
 **Scenario 1c: On main — pick from branches with comments**
 
 ```bash
@@ -154,12 +157,13 @@ For each comment on the selected artifacts, you choose an action:
 # ⊘ Skipped
 ```
 
-**Quit early:**
+**Quit early (proceeds to prompt generation with comments processed so far):**
 
 ```bash
 # Action? [p]rocess / [s]kip / [q]uit: q
 #
 # Exiting loop. 3 comments processed, 2 remaining.
+# Proceeding to prompt generation with 3 processed comments...
 ```
 
 **Edge case — selected text not found in file:**
@@ -285,6 +289,15 @@ After the agent exits, you see a summary of changes:
 #
 # ✓ Committed: a1b2c3d "Address review feedback on spec and data model"
 # ✓ Pushed to origin/009-feature-name
+```
+
+**No changes on disk (agent committed itself or no changes needed):**
+
+```bash
+# ───────────────────────────────────────────────────────────────────────────────
+# Agent session complete. No uncommitted changes detected.
+# ───────────────────────────────────────────────────────────────────────────────
+# Proceeding to comment resolution...
 ```
 
 **Skip committing:**
@@ -439,6 +452,58 @@ sl revise --auto fixture.json
 
 ---
 
+## Summary Mode (US9)
+
+Compact, non-interactive listing of unresolved comments for use by other tools (e.g., `/specledger.clarify`).
+
+```bash
+sl revise --summary
+
+# Output (stdout):
+# specledger/009-feature-name/spec.md:10-15  "Consider adding more detail"    (so0k)
+# specledger/009-feature-name/spec.md:42     "Missing performance reqs"       (reviewer)
+# specledger/009-feature-name/plan.md:—      "Needs architecture diagram"     (Ariel)
+#
+# 3 unresolved comments across 2 artifacts
+```
+
+**Auth failure (silent exit for agent integration):**
+
+```bash
+sl revise --summary
+# [no output, exit code 1]
+# Calling agent (e.g., /specledger.clarify) can gracefully fall back to local-only analysis
+```
+
+### Integration with `/specledger.clarify`
+
+When a user runs `/specledger.clarify` inside Claude Code, the clarify prompt instructs the agent to:
+
+1. Run `sl revise --summary` to fetch reviewer feedback
+2. If successful, present comments via AskUserQuestion multi-select
+3. Incorporate selected reviewer feedback into the clarification session
+4. If auth fails, proceed with local-only spec analysis (no error shown)
+
+```bash
+# User inside Claude Code:
+/specledger.clarify
+
+# Agent executes internally:
+# $ sl revise --summary
+# [gets comment listing]
+#
+# Agent presents to user:
+# "I found 3 reviewer comments. Select which to include in this clarification:"
+#   [x] spec.md:10-15 — "Consider adding more detail" (so0k)
+#   [ ] spec.md:42    — "Missing performance reqs" (reviewer)
+#   [x] plan.md       — "Needs architecture diagram" (Ariel)
+#
+# Agent proceeds with its spec analysis, incorporating the 2 selected comments
+# as additional context for ambiguity resolution.
+```
+
+---
+
 ## Dry Run (Interactive)
 
 Go through the full interactive flow but write the prompt to a file instead of launching the agent:
@@ -497,10 +562,12 @@ Arguments:
 Flags:
   --auto <file>  Non-interactive mode with fixture file (outputs prompt to stdout)
   --dry-run      Interactive flow but write prompt to file instead of launching agent
+  --summary      Compact comment listing to stdout (non-interactive, for agent use)
 
 Examples:
   sl revise                          # Auto-detect branch, interactive
   sl revise 009-feature-name         # Specify branch, interactive
   sl revise --dry-run                # Interactive, save prompt to file
   sl revise --auto fixture.json      # Non-interactive, prompt to stdout
+  sl revise --summary                # Compact listing for agent integration
 ```

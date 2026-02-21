@@ -88,7 +88,8 @@ As a developer with a finalized revision prompt, I want to launch my configured 
 
 1. **Given** I have a finalized prompt, **When** I choose to launch the coding agent, **Then** the configured agent command is executed with the prompt content provided as input.
 2. **Given** no coding agent is configured, **When** I choose to launch, **Then** I see a message explaining how to configure one and am prompted for a filename to write the prompt to.
-3. **Given** the coding agent has completed its work and exited, **When** control returns to `sl revise`, **Then** I see a summary of changed files and am offered to commit and push before proceeding to comment resolution.
+3. **Given** the coding agent has completed its work and exited with file changes, **When** control returns to `sl revise`, **Then** I see a summary of changed files and am offered to commit and push before proceeding to comment resolution.
+4. **Given** the coding agent has exited with no file changes on disk (agent may have committed itself, or no changes were needed), **When** control returns to `sl revise`, **Then** I skip the commit/push step and proceed directly to comment resolution.
 
 ---
 
@@ -144,6 +145,22 @@ As a developer or CI pipeline, I want to run `sl revise --auto <fixture.json>` w
 
 ---
 
+### User Story 9 - Summary Flag for Non-Interactive Comment Listing (Priority: P9)
+
+As a coding agent (e.g., Claude Code running `/specledger.clarify`), I want to run `sl revise --summary` to get a compact, non-interactive listing of unresolved comments with file paths, line ranges, and comment text — so the agent can incorporate reviewer feedback into its analysis without launching another interactive session.
+
+**Why this priority**: Enables integration with the `/specledger.clarify` workflow. When a user runs `/specledger.clarify` inside Claude Code, the clarify prompt instructs the agent to call `sl revise --summary` to fetch reviewer comments alongside its own spec ambiguity analysis. This makes reviewer feedback available to the clarify workflow without requiring a separate interactive revise session.
+
+**Independent Test**: Can be tested by running `sl revise --summary` and verifying the output is a compact, machine-readable listing of unresolved comments to stdout.
+
+**Acceptance Scenarios**:
+
+1. **Given** I run `sl revise --summary`, **When** unresolved comments exist, **Then** I see a compact listing to stdout with one entry per comment showing: file path, line range (if available), selected text (truncated), and comment content (truncated).
+2. **Given** I run `sl revise --summary` and authentication fails, **When** the API call fails, **Then** the command exits silently with a non-zero exit code (no error output to stdout), so the calling agent can gracefully fall back to local-only analysis.
+3. **Given** the `/specledger.clarify` prompt includes instructions to call `sl revise --summary`, **When** the agent executes it, **Then** the agent can present the comments to the user via AskUserQuestion multi-select to choose which reviewer feedback to incorporate into the clarification session.
+
+---
+
 ### Edge Cases
 
 - What happens when the API returns an authentication error mid-session (token expired)? All API calls should auto-retry on 401/PGRST303: call `auth.GetValidAccessToken()` (which auto-refreshes the token) and retry the request once. This is critical because the agent session can last a long time, making token expiry likely before the resolve step.
@@ -185,6 +202,7 @@ As a developer or CI pipeline, I want to run `sl revise --auto <fixture.json>` w
 - **FR-022**: All API calls MUST auto-retry on 401/PGRST303 errors by refreshing the access token and retrying the request once, to handle token expiry during long agent sessions.
 - **FR-023**: System MUST support `--auto <fixture.json>` flag for non-interactive automation. In auto mode: process only the comments specified in the fixture, generate the prompt, and print it to stdout. No agent is launched and no comments are resolved. This enables snapshot testing of prompt generation.
 - **FR-024**: System MUST support `--dry-run` flag (for interactive mode) that outputs the generated prompt to a file instead of launching the agent, and does not resolve comments.
+- **FR-025**: System MUST support `--summary` flag that outputs a compact, non-interactive listing of unresolved comments to stdout and exits. On auth failure, exit silently with non-zero exit code (no error to stdout).
 - **FR-021**: The session MUST exit after one complete cycle (fetch → select → process → prompt → agent → commit/push → resolve). Users re-run `sl revise` for remaining unresolved comments. No `--resolve` flag is needed; the full flow handles resolution with the ability to skip/quit the processing loop to reach resolution quickly.
 
 ### Key Entities
