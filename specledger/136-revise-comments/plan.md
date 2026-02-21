@@ -101,6 +101,7 @@ tests/
 3. Reusable `MockPostgREST` helper (benefits session package too)
 4. Integration tests (build binary, run `sl revise --auto`, verify stdout)
 5. CI pipeline update for integration tests
+6. Regex unit tests for `pkg/cli/git` and `pkg/cli/session` — see TD-3 in Tech Debt section
 
 ## Key Design Decisions
 
@@ -344,6 +345,77 @@ Items identified during review feedback, deferred from this sprint:
 
 - **Export resolve file on auth expiry**: When the refresh token is also expired during the resolve step, export a JSON file listing comments to resolve. The user can re-authenticate and run `sl revise --auto resolve-file.json` to complete resolution.
 - **Multi-pane TUI**: Rich TUI with artifact tree (left), comment detail (right), controls (bottom), and free navigation between views. See research.md R11 for design notes and reference implementations.
+
+---
+
+## Tech Debt Identified — Sprint 136 (2026-02)
+
+Items discovered during implementation and manual testing of the `sl revise` flow. Not blocking the initial release but should be addressed in follow-up sprints.
+
+### TD-1 — Editor launch UX: confirm before opening, name the editor
+
+**Problem**: The editor opens immediately after comment processing with no transition message. The user has no indication which editor will be used or what to do when they exit.
+
+**Current behaviour**:
+```
+[comment processing loop ends]
+[vim opens immediately with no preamble]
+[user saves and exits]
+What would you like to do? › Launch / Re-edit / Write to file / Cancel
+```
+
+**Expected behaviour**:
+```
+──────────────────────────────────────────────────────────
+3 comments processed. Revision prompt is ready.
+Opening vim — review and refine the prompt, then save and exit to continue.
+──────────────────────────────────────────────────────────
+[vim opens]
+[user saves and exits]
+What would you like to do? › Launch / Re-edit / Write to file / Cancel
+```
+
+**Implementation**:
+- In `editAndConfirmPrompt`, before calling `revise.EditPrompt`: call `detectEditor()` (already exists in `editor.go`), print the transition message naming the editor.
+- The `detectEditor()` call currently happens inside `EditPrompt`; expose it or duplicate the lookup.
+- No new dependencies.
+
+---
+
+### TD-2 — Model selection: let user choose Claude model before agent launch
+
+**Problem**: The agent is always launched with its default model. For spec revision work, the user may want to pick a specific model (e.g., `claude-opus-4-5` for deep reasoning vs `claude-haiku-4-5` for speed).
+
+**Investigation needed**:
+- Does `claude` CLI support `--list-models` or equivalent to enumerate available models at runtime?
+- Does `claude` CLI support a `--model <id>` flag that can be prepended to the prompt argument?
+- If yes to both: fetch model list, present `huh.NewSelect`, pass `--model <id>` when constructing the `exec.Command` in `AgentLauncher.LaunchWithPrompt`.
+- If `--list-models` is not available: hardcode a curated list of current Claude models (updated with each release) as a fallback.
+
+**Scope**: Change is localised to `AgentLauncher.LaunchWithPrompt` in `pkg/cli/launcher/launcher.go` and the call site in `commands/revise.go` Step 9.
+
+---
+
+### TD-3 — Regex unit tests: `pkg/cli/git` and `pkg/cli/metadata` gaps
+
+**Problem**: Three packages use compiled regexes with no test coverage. A regression in `repoURLRe` (URL parsing) was only caught by a manual `sl revise` run — it was not caught by any automated test.
+
+**Packages and patterns without tests**:
+
+| File | Pattern | Risk |
+|------|---------|------|
+| `pkg/cli/git/git.go` | `repoURLRe` — parses GitHub remote URL to extract owner/repo | High — used on every `sl revise` invocation |
+| `pkg/cli/git/git.go` | `featureBranchRe` — detects feature branches for auto-confirm | Medium — affects branch selection UX |
+| `pkg/cli/session/capture.go` | `gitCommitPattern`, `gitAmendPattern` — detects git commits in shell history | Medium — missed detection = missed session checkpoint |
+| `pkg/cli/commands/bootstrap_helpers.go` | `placeholderPattern` — detects unfilled template slots | Low — bootstrap-only path |
+
+**Recommended tests** (all table-driven):
+- `TestGetRepoOwnerName`: standard SSH, SSH config alias (`github.com-<suffix>`), HTTPS, `.git` suffix / no suffix, invalid URL
+- `TestIsFeatureBranch`: `136-name` → true, `main` → false, `99-short` → false (< 3 digits), `1234-long` → true
+- `TestGitCommitPattern`: `git commit -m "..."` → match, `git commit --amend` → match, `git push` → no match
+- `TestPlaceholderPattern`: `[FOO]` → match, `[AB]` → no match (< 3 chars), `[foo]` → no match (lowercase)
+
+**Where to add**: New file `pkg/cli/git/git_test.go`; extend `pkg/cli/session/capture_test.go` (create if needed).
 
 ## Complexity Tracking
 
