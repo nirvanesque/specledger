@@ -617,7 +617,6 @@ func selectArtifacts(comments []revise.ReviewComment) ([]revise.ReviewComment, e
 	return result, nil
 }
 
-
 // processComments shows each comment with lipgloss styling and lets the user
 // choose to Process (with optional guidance), Skip, or Quit the loop.
 func processComments(comments []revise.ReviewComment) ([]revise.ProcessedComment, error) {
@@ -874,7 +873,7 @@ func writePromptInteractive(prompt string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("filename input: %w", err)
 	}
-	if err := os.WriteFile(filename, []byte(prompt), 0644); err != nil { //nolint:gosec — user-specified output file
+	if err := os.WriteFile(filename, []byte(prompt), 0600); err != nil {
 		return "", fmt.Errorf("failed to write prompt: %w", err)
 	}
 	fmt.Printf("Prompt written to %s\n", filename)
@@ -914,7 +913,7 @@ func writePromptToFile(prompt string) error {
 	if filename == "" {
 		filename = "revision-prompt.md"
 	}
-	if err := os.WriteFile(filename, []byte(prompt), 0644); err != nil { //nolint:gosec — user-specified output file
+	if err := os.WriteFile(filename, []byte(prompt), 0600); err != nil {
 		return fmt.Errorf("failed to write prompt: %w", err)
 	}
 	fmt.Printf("Prompt written to %s\n", filename)

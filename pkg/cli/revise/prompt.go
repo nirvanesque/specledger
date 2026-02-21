@@ -1,8 +1,8 @@
 package revise
 
 import (
-	_ "embed"
 	"bytes"
+	_ "embed"
 	"fmt"
 	"math"
 	"text/template"

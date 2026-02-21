@@ -281,9 +281,9 @@ func (c *ReviseClient) ResolveComment(commentID string) error {
 // ListSpecsWithComments returns all specs for the project that have unresolved review comments.
 //
 // Implementation: 3 sequential calls + client-side aggregation.
-//   1. GET /rest/v1/specs?project_id=eq.{pid}&select=id,spec_key
-//   2. GET /rest/v1/changes?spec_id=in.({spec_ids})&select=id,spec_id
-//   3. GET /rest/v1/review_comments?change_id=in.({change_ids})&is_resolved=eq.false&select=id,change_id
+//  1. GET /rest/v1/specs?project_id=eq.{pid}&select=id,spec_key
+//  2. GET /rest/v1/changes?spec_id=in.({spec_ids})&select=id,spec_id
+//  3. GET /rest/v1/review_comments?change_id=in.({change_ids})&is_resolved=eq.false&select=id,change_id
 //
 // Client-side: group comments by change → map change to spec → count per spec_key.
 // See contracts/postgrest-api.md §6 for the rationale.

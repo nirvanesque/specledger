@@ -187,7 +187,7 @@ func TestPromptSnapshot(t *testing.T) {
 		if err := os.MkdirAll(filepath.Dir(goldenPath), 0755); err != nil {
 			t.Fatalf("failed to create testdata dir: %v", err)
 		}
-		if err := os.WriteFile(goldenPath, []byte(prompt), 0644); err != nil {
+		if err := os.WriteFile(goldenPath, []byte(prompt), 0600); err != nil {
 			t.Fatalf("failed to write golden file: %v", err)
 		}
 		t.Logf("golden file updated: %s", goldenPath)

@@ -60,4 +60,3 @@ func EditPrompt(prompt string) (string, error) {
 
 	return string(content), nil
 }
-

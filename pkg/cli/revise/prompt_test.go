@@ -12,9 +12,9 @@ func TestEstimateTokens(t *testing.T) {
 		want  int
 	}{
 		{"empty", "", 0},
-		{"3 chars", "abc", 1},       // ceil(3/3.5) = ceil(0.857) = 1
-		{"7 chars", "1234567", 2},   // ceil(7/3.5) = ceil(2.0) = 2
-		{"100 chars", strings.Repeat("a", 100), 29}, // ceil(100/3.5) = ceil(28.571) = 29
+		{"3 chars", "abc", 1},                        // ceil(3/3.5) = ceil(0.857) = 1
+		{"7 chars", "1234567", 2},                    // ceil(7/3.5) = ceil(2.0) = 2
+		{"100 chars", strings.Repeat("a", 100), 29},  // ceil(100/3.5) = ceil(28.571) = 29
 		{"350 chars", strings.Repeat("a", 350), 100}, // ceil(350/3.5) = 100 exactly
 		{"351 chars", strings.Repeat("a", 351), 101}, // ceil(351/3.5) = ceil(100.28) = 101
 	}
