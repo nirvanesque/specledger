@@ -25,42 +25,27 @@ A developer wants to use an alternative AI provider (e.g., a self-hosted endpoin
 
 ### User Story 2 - Local vs Global Configuration Hierarchy (Priority: P2)
 
-A developer works on multiple projects. They have a global default configuration (e.g., their personal API endpoint and credentials) but need to override specific settings for one project (e.g., a different model or base URL required by the team). They set global defaults in their home directory and project-level overrides in the project's `specledger/specledger.yaml`. The system merges these, with local settings taking precedence.
+A developer works on multiple projects with different team requirements. They have global default configuration (their personal preferences and credentials) but one project requires a different provider endpoint mandated by the team. Additionally, each team member may need personal overrides (such as their own auth token) that should not be committed to git. The system supports three configuration layers — global user defaults, team-shared project configuration (git-tracked), and personal project overrides (gitignored) — and merges them with a clear, predictable precedence where more specific layers override broader ones.
 
-**Why this priority**: Multi-project support is essential for professional developers who work across different teams and environments. Without local/global layering, users must reconfigure for every project switch.
+**Why this priority**: Multi-project support is essential for professional developers who work across different teams and environments. The personal project override layer (gitignored) solves the critical need for team members to maintain individual settings (e.g., personal auth tokens) alongside shared team configuration, without conflicts. This pattern is well-established in tools like git config and Claude Code's own `.local.json` settings.
 
-**Independent Test**: Can be fully tested by setting a global config value, then overriding it at the project level, and verifying `sl config show` displays the merged result with the local override winning.
-
-**Acceptance Scenarios**:
-
-1. **Given** a global config sets `agent.base-url` to `https://default.example.com`, **When** no project-level override exists, **Then** `sl config show` displays the global base URL with a "global" scope indicator.
-2. **Given** a global config sets `agent.base-url` and a project config overrides it, **When** the user runs `sl config show`, **Then** the project-level value is displayed as the effective value with a "local" scope indicator.
-3. **Given** a user sets a value with `--global` flag, **When** they view the configuration, **Then** the value is stored in the user's home directory configuration, not in the project.
-
----
-
-### User Story 3 - Interactive Configuration Management (Priority: P3)
-
-A developer wants to review and modify all available SpecLedger settings through an interactive terminal interface. They run `sl config` (without subcommands) and see a TUI screen showing all configurable options organized by category. Boolean options show as toggles, enum-style options show as selectable lists, and text fields allow inline editing. They can see which values come from global vs local scope and where overrides exist.
-
-**Why this priority**: A visual configuration interface lowers the barrier to discovery and reduces errors. Users don't need to memorize config key names or valid values — the UI guides them.
-
-**Independent Test**: Can be fully tested by launching the interactive TUI, navigating through all categories, toggling a boolean setting, selecting an enum value, and editing a text field, then verifying the changes persist.
+**Independent Test**: Can be fully tested by setting a global config value, overriding it at the team project level, then adding a personal project override, and verifying the system displays the merged result with the correct precedence and scope indicators.
 
 **Acceptance Scenarios**:
 
-1. **Given** a user runs `sl config` interactively, **When** the TUI loads, **Then** all configurable settings are shown organized by category (General, Agent, etc.) with their current values and scope (local/global).
-2. **Given** a boolean setting is displayed, **When** the user presses space or enter on it, **Then** the value toggles between enabled/disabled and the change is saved.
-3. **Given** an enum setting (e.g., agent choice) is displayed, **When** the user navigates to it, **Then** a list of valid options is shown and the user can select one.
-4. **Given** a user modifies a setting in the TUI, **When** they choose to save at local scope, **Then** the value is written to the project configuration; when global, to the home directory configuration.
+1. **Given** a global config sets a base URL, **When** no project-level override exists, **Then** viewing configuration displays the global value with a "global" scope indicator.
+2. **Given** a global config sets a base URL and a team project config overrides it, **When** the user views configuration, **Then** the project-level value is displayed as the effective value with a "local" scope indicator.
+3. **Given** a team project config sets a value and a personal project override (gitignored) exists for the same key, **When** the user views configuration, **Then** the personal override is displayed as the effective value.
+4. **Given** a user sets a value targeting the global scope, **When** they view the configuration, **Then** the value is stored in the user home directory configuration, not in the project.
+5. **Given** a user removes a personal project override, **When** they view configuration, **Then** the team project value takes effect immediately.
 
 ---
 
-### User Story 4 - Custom Agent Profiles (Priority: P3)
+### User Story 3 - Custom Agent Profiles (Priority: P2)
 
 A developer frequently switches between different AI provider configurations (e.g., "work" profile using a corporate endpoint, "personal" profile using the default, "experimental" using a cutting-edge model). They define named profiles that bundle together a set of agent configuration values and can quickly switch between them.
 
-**Why this priority**: Profiles are a convenience feature that builds on the core config system. They reduce friction for users with multiple environments but are not required for the feature to be useful.
+**Why this priority**: The original user request is a shell alias that bundles multiple environment variables together — that is essentially a profile. Profiles are the natural abstraction for users who need to switch between provider configurations (e.g., corporate gateway vs. personal API vs. local endpoint) without re-running multiple config commands.
 
 **Independent Test**: Can be fully tested by creating two named profiles with different settings, switching between them, and verifying the active profile's values are applied when launching the agent.
 
@@ -78,7 +63,8 @@ A developer frequently switches between different AI provider configurations (e.
 - What happens when both a profile and explicit overrides are set? Explicit overrides should take precedence over the active profile.
 - What happens when a user removes a local override? The global value should take effect immediately.
 - What happens when configuration keys are invalid or unrecognized? The system should reject them with a clear error message listing valid keys.
-- What happens when a user migrates from the old constitution-based agent preference? The system should read the existing preference and offer to migrate it to the new configuration format.
+- What happens when a user has an existing agent preference in CONSTITUTION.md? The system should detect it and offer to migrate it to the new configuration format. (Note: the current state of agent preferences in CONSTITUTION.md requires further clarification with project members.)
+- What happens when a team member has personal project overrides that differ from the team-shared configuration? The personal override (gitignored) takes precedence for that user without affecting other team members' configurations.
 - What happens when the auth token in configuration has expired? The system should pass it through as-is — token validity is the responsibility of the downstream provider, not SpecLedger.
 
 ## Requirements *(mandatory)*
@@ -86,23 +72,22 @@ A developer frequently switches between different AI provider configurations (e.
 ### Functional Requirements
 
 - **FR-001**: System MUST allow users to configure agent launch environment variables (model names, base URL, auth token) through a persistent configuration mechanism.
-- **FR-002**: System MUST support a two-tier configuration hierarchy: global (user home directory) and local (project-level), where local settings override global settings.
+- **FR-002**: System MUST support a three-tier configuration hierarchy: global (user home directory), team-local (project-level, git-tracked), and personal-local (project-level, gitignored), where more specific layers override broader ones (personal-local > team-local > global > default).
 - **FR-003**: System MUST provide a `sl config` command with subcommands to get, set, list, and unset configuration values.
 - **FR-004**: System MUST support a `--global` flag to target the global configuration and default to local (project-level) when in a project context.
 - **FR-005**: System MUST mask sensitive values (auth tokens) when displaying configuration to the terminal.
 - **FR-006**: System MUST store sensitive configuration values (auth tokens) in files with restricted permissions (owner read/write only).
-- **FR-007**: System MUST inject configured agent environment variables into the agent subprocess when launching.
-- **FR-008**: System MUST provide an interactive TUI for browsing and editing configuration when `sl config` is run without subcommands in an interactive terminal.
-- **FR-009**: The TUI MUST render boolean settings as toggles, enum settings as selectable lists, and text settings as editable fields.
-- **FR-010**: System MUST display the effective value and its source scope (global, local, or default) for each configuration key.
+- **FR-007**: System MUST inject configured agent environment variables into the agent subprocess when launching. The subprocess MUST inherit the current process environment, with configured values taking precedence over existing environment variables.
+- **FR-007a**: System MUST support an `agent.env` configuration key that accepts a map of arbitrary key-value pairs, each injected as an environment variable into the agent subprocess. This enables configuration of agent-specific environment variables beyond the predefined configuration keys.
+- **FR-008**: System MUST display the effective value and its source scope (global, local, or default) for each configuration key.
 - **FR-011**: System MUST support named agent profiles that bundle multiple agent configuration values together.
 - **FR-012**: System MUST validate configuration keys and values, rejecting unknown keys with a helpful error message.
-- **FR-013**: System MUST migrate existing agent preference from CONSTITUTION.md to the new configuration format when detected, with user confirmation.
+- **FR-013**: System SHOULD detect existing agent preference in CONSTITUTION.md and offer to migrate it to the new configuration format, with user confirmation. (Note: requires clarification with project members on current usage patterns.)
 
 ### Key Entities
 
-- **Configuration Key**: A named setting with a defined type (string, boolean, enum), scope (global/local), and optional default value. Keys are namespaced by category (e.g., `agent.base-url`, `general.tui-enabled`).
-- **Configuration Scope**: The level at which a value is set — "default" (built-in), "global" (user home), or "local" (project). Resolution follows local > global > default precedence.
+- **Configuration Key**: A named setting with a defined type (string, boolean, enum, or string-map), scope (global/local), and optional default value. Keys are namespaced by category (e.g., `agent.base-url`, `agent.env`).
+- **Configuration Scope**: The level at which a value is set — "default" (built-in), "global" (user home), "team-local" (project, git-tracked), or "personal-local" (project, gitignored). Resolution follows personal-local > team-local > global > profile > default precedence.
 - **Agent Profile**: A named collection of agent configuration values (model names, base URL, auth token) that can be activated as a unit. One profile may be active at a time.
 - **Agent Environment**: The set of environment variables passed to the agent subprocess at launch time, derived from the resolved configuration (merged defaults, global, local, and profile values).
 
@@ -112,7 +97,7 @@ A developer frequently switches between different AI provider configurations (e.
 
 - **SC-001**: Users can configure and launch an agent with custom model settings in under 2 minutes, without needing manual shell aliases or environment variable exports.
 - **SC-002**: Configuration changes made via `sl config set` are reflected immediately in subsequent `sl config show` output and agent launches.
-- **SC-003**: 100% of configurable settings are accessible through both the CLI subcommands and the interactive TUI.
+- **SC-003**: 100% of configurable settings are accessible through the CLI subcommands (`set`, `get`, `show`, `unset`).
 - **SC-004**: Users with multiple projects can maintain different agent configurations per project without interference between projects.
 - **SC-005**: Sensitive values (auth tokens) are never displayed in full in terminal output.
 - **SC-006**: Existing users with agent preferences in CONSTITUTION.md are offered a migration path to the new system without losing their settings.
@@ -123,7 +108,7 @@ A developer frequently switches between different AI provider configurations (e.
 - **Agent Launcher (pkg/cli/launcher)**: Current agent launching system with `AgentOption` struct and subprocess execution — the foundation this feature extends.
 - **Global Config (pkg/cli/config)**: Existing global config system at `~/.config/specledger/config.yaml` with `DefaultConfig()`, `Load()`, `Save()` pattern — will be extended with agent settings.
 - **Project Metadata (pkg/cli/metadata)**: Existing `specledger/specledger.yaml` schema — will be extended with local configuration overrides.
-- **Bootstrap TUI (pkg/cli/tui)**: Existing Bubble Tea TUI for `sl new` and `sl init` with radio buttons, checkboxes, and text inputs — patterns to reuse for config management TUI.
+- **Bootstrap TUI (pkg/cli/tui)**: Existing Bubble Tea TUI for `sl new` and `sl init` with radio buttons, checkboxes, and text inputs. An interactive config editor TUI was descoped from this feature — see `research/003-tui-framework-spike.md` for findings and a future TUI spec recommendation.
 
 ## Dependencies & Assumptions
 
@@ -135,3 +120,8 @@ A developer frequently switches between different AI provider configurations (e.
 - Agent profiles are stored alongside configuration (in the same files), not in separate profile files.
 - The set of configurable agent environment variables includes at minimum: model names (sonnet, opus, haiku), base URL, and auth token — matching the common `ANTHROPIC_*` environment variable pattern.
 - Boolean and enum types for settings are determined by a schema defined in code, not by user input.
+- Personal project-level configuration is stored in a gitignored file alongside the team-shared project configuration, following the established `.local` convention used by Claude Code and other tools.
+- The agent subprocess inherits the current process environment, with configured values overriding any matching environment variables.
+- Secrets management integration (e.g., 1Password, SOPS, Bitwarden, AWS Secrets Manager) is out of scope for this feature. The design should not preclude future integration.
+- Interactive TUI config editor was descoped from this feature after a research spike (see `research/003-tui-framework-spike.md`). The existing SpecLedger TUI is step-based form wizards only; a full config editor requires building a reusable TUI shell (tree nav, panes, inline editing) estimated at 6-10 days — recommended as a separate spec that also benefits the revise flow.
+- The migration from CONSTITUTION.md agent preferences (FR-013) requires clarification with project members on the current state and usage patterns.
