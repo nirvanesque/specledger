@@ -277,70 +277,20 @@ When the agent exits with no uncommitted file changes (agent committed itself, o
 
 Items identified during review feedback, deferred from this sprint:
 
-- **Agent-driven resolve — `sl resolve` command** *(high impact)*: Instead of `sl revise` handling commit/push/resolve after the agent exits, the agent itself would drive the lifecycle from within its shell session. This requires:
+- **Agent-driven comment management — `sl comments` command group** *(high impact)*: Instead of `sl revise` handling comment resolution after the agent exits, a dedicated `sl comments` command group gives both users and agents fine-grained control over comment workflows:
 
-  1. **New `sl resolve` command**: Called by the agent after each edit to mark a comment as resolved with an explanation:
-     ```bash
-     sl resolve --file specledger/009-xxx/spec.md \
-       --text "selected passage from reviewer" \
-       --reply "Removed retry language; content is statically pre-generated"
-     ```
-     - Matches comment by `file_path` + `selected_text` (no UUIDs exposed)
-     - Creates a reply child comment (`is_ai_generated=true`, `triggered_by_user_id` from auth)
-     - Marks parent comment as `is_resolved=true`
-     - Uses same `~/.specledger/credentials.json` (agent runs as subprocess of authenticated `sl revise`)
-     - Graceful no-op if comment already resolved
+  **Planned subcommands**:
+  - `sl comments pull` — Fetch and cache unresolved comments for the current spec/branch
+  - `sl comments list [--artifact <path>]` — List unresolved comments, optionally filtered by artifact
+  - `sl comments summarize [--artifact <path>]` — Summarize comments grouped by artifact with counts
+  - `sl comments resolve <id-or-match> --reason "..."` — Resolve a comment with an explanation (matches by file_path + selected_text, no UUIDs exposed)
+  - `sl comments reply <id-or-match> --body "..."` — Add a reply to a comment without resolving
 
-  2. **Prompt template update**: Instruct the agent to call `sl resolve` after applying each edit:
-     ```gotemplate
-     ## After Each Edit
-     After applying the approved edit for a comment, resolve it:
-     ```
-     sl resolve --file "{{.FilePath}}" --text "{{.Target}}" --reply "<your summary>"
-     ```
-     After all edits are complete, commit your changes:
-     ```
-     git add <modified files>
-     git commit -m "feat: address review feedback — <summary>"
-     ```
-     ```
+  **Agentic workflow**: The agent can call these commands from within its shell session to pull context, resolve comments incrementally, and provide structured reasons — eliminating the need for `sl revise` to handle post-agent resolution.
 
-  3. **Impact on current flow**: Steps 17-22 (post-agent commit/push/resolve in `sl revise`) become a **fallback** for when the agent doesn't handle it. The parent process would detect:
-     - If all processed comments are already resolved → skip resolve step
-     - If changes are already committed → skip commit step
-     - Only prompt for remaining unresolved comments or uncommitted changes
+  **Impact on current flow**: Steps 17-22 (post-agent commit/push/resolve in `sl revise`) become a **fallback** for when `sl comments` commands are not available or the agent doesn't use them.
 
-  4. **UX flow** (agent-driven):
-     ```
-     $ sl revise
-     [branch selection, comment processing, prompt generation...]
-     Launching Claude Code...
-
-     # Inside Claude Code session:
-     [Agent reads spec.md, proposes edit for comment 1]
-     [User approves via AskUserQuestion]
-     [Agent applies edit]
-     $ sl resolve --file spec.md --text "retry option" --reply "Removed retry language"
-     # ✓ Comment resolved
-
-     [Agent processes comment 2...]
-     $ sl resolve --file spec.md --text "by making project" --reply "Clarified wording"
-     # ✓ Comment resolved
-
-     [Agent commits]
-     $ git add specledger/009-xxx/spec.md
-     $ git commit -m "feat: address review feedback on spec clarity and retry language"
-
-     [Agent exits]
-
-     # Back in sl revise:
-     # ✓ Agent session complete
-     # ✓ 2 of 2 comments already resolved by agent
-     # ✓ Changes already committed: a1b2c3d
-     # Nothing left to do. Session complete.
-     ```
-
-  **Estimated effort**: 3-5 days (new command + prompt redesign + post-agent detection logic)
+  **Estimated effort**: 5-8 days (command group scaffolding + individual subcommands + prompt template updates)
   **Prerequisite**: Core `sl revise` flow (this sprint) must be working first
 
 - **Export resolve file on auth expiry**: When the refresh token is also expired during the resolve step, export a JSON file listing comments to resolve. The user can re-authenticate and run `sl revise --auto resolve-file.json` to complete resolution.
