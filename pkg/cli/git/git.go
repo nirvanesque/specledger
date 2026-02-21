@@ -27,7 +27,9 @@ import (
 var featureBranchRe = regexp.MustCompile(`^\d{3,}-`)
 
 // repoURLRe extracts owner/name from GitHub remote URLs (both HTTPS and SSH forms).
-var repoURLRe = regexp.MustCompile(`github\.com[:/]([^/]+)/([^/\.]+?)(?:\.git)?$`)
+// Also matches SSH config aliases like git@github.com-so0k:owner/repo.git where
+// the hostname suffix (-so0k) is a per-account alias in ~/.ssh/config.
+var repoURLRe = regexp.MustCompile(`github\.com(?:-[^:/]+)?[:/]([^/]+)/([^/\.]+?)(?:\.git)?$`)
 
 // openRepo opens the git repository at repoPath, searching parent dirs for .git.
 func openRepo(repoPath string) (*gogit.Repository, error) {

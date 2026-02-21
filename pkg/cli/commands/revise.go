@@ -658,11 +658,19 @@ func processComments(comments []revise.ReviewComment) ([]revise.ProcessedComment
 		}
 
 		if c.SelectedText != "" {
-			// Edge case 2: selected text no longer present in the current file version
+			// Edge case 2: selected text no longer present in the current file version.
+			// Try literal match first; fall back to markdown-stripped comparison to avoid
+			// false positives when the reviewer selected from a rendered view (backticks,
+			// bold markers etc. are invisible in rendered markdown but present in the raw file).
 			if fileExists {
 				content, readErr := os.ReadFile(c.FilePath)
-				if readErr == nil && !strings.Contains(string(content), c.SelectedText) {
-					fmt.Println("⚠ Original selected text not found in current file version")
+				if readErr == nil {
+					fileStr := string(content)
+					literalFound := strings.Contains(fileStr, c.SelectedText)
+					strippedFound := strings.Contains(mdStripper.Replace(fileStr), mdStripper.Replace(c.SelectedText))
+					if !literalFound && !strippedFound {
+						fmt.Println("⚠ Original selected text not found in current file version")
+					}
 				}
 			}
 
@@ -859,6 +867,10 @@ func writePromptInteractive(prompt string) (string, error) {
 	fmt.Printf("Prompt written to %s\n", filename)
 	return "", nil
 }
+
+// mdStripper removes common Markdown formatting characters so that selected_text
+// (captured from a rendered view) can be matched against raw .md file content.
+var mdStripper = strings.NewReplacer("`", "", "**", "", "*", "", "_", "", "~~", "")
 
 // networkHint appends a network connectivity hint to err when the error message
 // does not already contain actionable API-level detail (e.g., "API error (404)").
