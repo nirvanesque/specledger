@@ -128,9 +128,25 @@ As a developer who selects a branch different from my current one, I want the co
 
 ---
 
+### User Story 8 - Automation Mode (Priority: P8)
+
+As a developer or CI pipeline, I want to run `sl revise --auto <fixture.json>` with a pre-prepared fixture file that specifies which comments to process and optional guidance per comment, so the revise flow can run non-interactively for testing or batch processing.
+
+**Why this priority**: Enables CI integration and repeatable testing. Not required for the core interactive workflow but makes the tool scriptable and testable.
+
+**Independent Test**: Can be tested by creating a fixture JSON file with comment IDs and guidance strings, running `sl revise --auto fixture.json`, and verifying the correct comments are processed with the specified guidance, the prompt is generated, and the agent is launched without interactive prompts.
+
+**Acceptance Scenarios**:
+
+1. **Given** I have a fixture file mapping comments to guidance strings, **When** I run `sl revise --auto fixture.json`, **Then** the command skips all interactive prompts, processes only the specified comments with their guidance, generates the prompt, and prints it to stdout. No agent is launched and no comments are resolved.
+2. **Given** the fixture file references a comment that doesn't exist or is already resolved, **When** the command processes it, **Then** it logs a warning and skips that entry.
+3. **Given** I want to validate prompt generation in a test suite, **When** I run `sl revise --auto fixture.json`, **Then** the stdout output is deterministic for a given set of comments and guidance, making it suitable for snapshot testing.
+
+---
+
 ### Edge Cases
 
-- What happens when the API returns an authentication error mid-session (token expired)? The command should detect the error and prompt the user to re-authenticate with `sl auth login`.
+- What happens when the API returns an authentication error mid-session (token expired)? All API calls should auto-retry on 401/PGRST303: call `auth.GetValidAccessToken()` (which auto-refreshes the token) and retry the request once. This is critical because the agent session can last a long time, making token expiry likely before the resolve step.
 - What happens when a comment references a file that no longer exists locally? The comment should still be displayed but flagged as "File not found locally" and the user can choose to skip or process it without file context.
 - What happens when multiple users are resolving comments concurrently? Resolving an already-resolved comment should be a no-op (idempotent).
 - What happens when the user's editor command fails or is not found? Fall back to displaying the prompt in the terminal and prompting for a filename to write it to.
@@ -160,12 +176,15 @@ As a developer who selects a branch different from my current one, I want the co
 - **FR-012**: System MUST generate a single combined revision prompt from an embedded template, merging all processed comments (across all selected artifacts) with their context, selected text, file references, and user guidance.
 - **FR-013**: System MUST launch the user's configured editor (`$EDITOR` or `$VISUAL`, defaulting to `vi`) to allow modification of the generated prompt.
 - **FR-014**: System MUST display the final prompt text after the editor closes and allow the user to confirm, re-edit, or cancel.
-- **FR-015**: System MUST provide an estimated token count for the generated prompt with warnings for prompts that are very short (under 100 tokens) or very long (over 8000 tokens).
+- **FR-015**: System MUST provide an estimated token count using a simple character-based heuristic (~3.5 characters per token, Anthropic's recommended local estimate) with warnings for prompts under 100 tokens or over 8000 tokens.
 - **FR-016**: System MUST launch the configured coding agent with the finalized prompt content when the user chooses to proceed.
 - **FR-017**: System MUST present a multi-select prompt after agent exit allowing the user to choose which processed comments to mark as resolved.
 - **FR-018**: System MUST resolve artifact comments by marking them as resolved in the remote system.
 - **FR-019**: System MUST detect uncommitted Git changes before the resolve step and warn the user about potential inconsistencies.
 - **FR-020**: System MUST handle API errors (401, 403, 404, expired tokens) with clear error messages and remediation guidance.
+- **FR-022**: All API calls MUST auto-retry on 401/PGRST303 errors by refreshing the access token and retrying the request once, to handle token expiry during long agent sessions.
+- **FR-023**: System MUST support `--auto <fixture.json>` flag for non-interactive automation. In auto mode: process only the comments specified in the fixture, generate the prompt, and print it to stdout. No agent is launched and no comments are resolved. This enables snapshot testing of prompt generation.
+- **FR-024**: System MUST support `--dry-run` flag (for interactive mode) that outputs the generated prompt to a file instead of launching the agent, and does not resolve comments.
 - **FR-021**: The session MUST exit after one complete cycle (fetch → select → process → prompt → agent → commit/push → resolve). Users re-run `sl revise` for remaining unresolved comments. No `--resolve` flag is needed; the full flow handles resolution with the ability to skip/quit the processing loop to reach resolution quickly.
 
 ### Key Entities
@@ -174,6 +193,7 @@ As a developer who selects a branch different from my current one, I want the co
 - **Artifact**: A file within a spec folder (e.g., `spec.md`, `plan.md`, `tasks.md`) that can have comments attached to it.
 - **Revision Prompt**: A generated text document combining comment context, file references, and user guidance, intended as input for a coding agent.
 - **Coding Agent**: An external tool (e.g., Claude Code) configured by the user to process revision prompts and make changes to files.
+- **Automation Fixture**: A JSON file specifying which comments to process and optional guidance per comment, enabling non-interactive/CI usage of `sl revise`.
 
 ## Success Criteria *(mandatory)*
 

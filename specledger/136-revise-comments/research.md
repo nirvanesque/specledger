@@ -131,3 +131,138 @@ os.Remove(tmpFile.Name())
 **Rationale**: The session package already has `session.GetProjectID(cwd)` which does exactly this. Reuse that function.
 
 **Verified**: `SELECT id FROM projects WHERE repo_owner = 'specledger' AND repo_name = 'specledger'` returns `7109364a-2ebc-451f-b052-2fbe5453459e`.
+
+## R10a: Existing Test Infrastructure
+
+**Decision**: Implement functionality first. Defer PostgREST mocking and test suite to a follow-up phase.
+
+**Rationale**: The codebase has zero HTTP mocking infrastructure. The `session` package — which makes identical PostgREST calls — has no tests. Establishing HTTP mocking patterns is valuable but should not block the feature implementation.
+
+**Current state**:
+- **Unit tests**: Standard `testing.T` with table-driven tests, scattered across `pkg/cli/metadata/`, `pkg/cli/prerequisites/`, `pkg/deps/`, `pkg/embedded/`
+- **Integration tests**: Build the `sl` binary, run as subprocess, verify output/filesystem (`tests/integration/`)
+- **HTTP mocking**: None. No `httptest.NewServer`, no custom `RoundTripper`, no mock generators
+- **Session package tests**: None exist despite making PostgREST and Storage API calls
+- **Test deps**: `stretchr/testify v1.11.1` available as indirect dep but rarely used
+- **CI**: GitHub Actions runs `make test` (unit) and golangci-lint. `make test-integration` exists but not in CI pipeline
+
+**Testing approach for this feature (phased)**:
+
+Phase A (with implementation):
+- `--auto` mode with snapshot testing (prompt output to stdout is deterministic)
+- Template rendering unit tests (pure function, no HTTP)
+- Token estimation unit tests (pure function)
+- Fixture parsing unit tests (JSON deserialization)
+- Git helper tests (can use `t.TempDir()` with git init)
+
+Phase B (follow-up):
+- PostgREST client tests using `httptest.NewServer` to mock Supabase responses
+- Auth retry tests (mock 401 → refresh → retry)
+- Integration tests (build binary, run `sl revise --auto fixture.json`, verify stdout)
+- Establish reusable `MockPostgREST` helper for the session package as well
+
+**Mock pattern to establish**:
+```go
+func newMockPostgREST(t *testing.T, routes map[string]interface{}) *httptest.Server {
+    return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        // Match route by path + query params
+        // Return canned JSON response
+    }))
+}
+```
+
+## R11: TUI Approach — Sequential with `huh` Forms
+
+**Decision**: Use `charmbracelet/huh` form library for sequential flow. Defer multi-pane TUI to a future sprint.
+
+**Rationale**: The existing codebase uses forward-only Bubble Tea flows (`sl_new.go`, `sl_init.go`) with custom form logic. `huh` provides multi-select, text input, confirm, and group-based step navigation out of the box — replacing ~200 lines of custom form code with ~30 lines of `huh` calls. Multi-pane TUI (tree view + detail + controls) would require ~10-15 days vs ~3-5 days for `huh` forms.
+
+**Current TUI state**: Forward-only, no back navigation, custom radio/checkbox components, `bubbles/textinput` for text entry. No `huh` in go.mod yet — needs `go get github.com/charmbracelet/huh`.
+
+**Multi-pane design (deferred)**: For a future sprint, the revise TUI could be refactored into:
+- Left pane: Artifact tree (using `tree-bubble` or custom)
+- Top-right: Comment position indicator + comment detail
+- Middle-right: Comment context (file content around `selected_text`)
+- Bottom: Controls (process/skip/quit) + guidance text input
+- Full prompt editor view with regenerate warning
+
+Reference implementations: [leg100/pug](https://github.com/leg100/pug) (662 stars), [KevM/bubbleo](https://github.com/KevM/bubbleo) (68 stars, NavStack pattern).
+
+**Alternatives considered**: Full multi-pane TUI (deferred due to effort), `tview` (different framework, not Charm ecosystem), plain Bubble Tea without `huh` (more custom code).
+
+## R12: Token Estimation — Simple Heuristic
+
+**Decision**: Use `len(text) / 3.5` character-based heuristic (rounded up). No external library.
+
+**Rationale**: Anthropic does NOT publish a local tokenizer for Claude 3+ models. Their official recommendation for local estimation is ~3.5 characters per token (~20% error margin). All Go tokenizer libraries (`hupe1980/go-tiktoken`, `tiktoken-go/tokenizer`, `pkoukk/tiktoken-go`) use pre-Claude-3 or OpenAI encodings that are equally approximate. The heuristic has zero binary size impact and zero dependencies.
+
+**Libraries evaluated**:
+- `hupe1980/go-tiktoken` (20 stars): Has native `claude` encoding but based on pre-Claude-3 tokenizer. +4-6MB binary.
+- `tiktoken-go/tokenizer` (421 stars): Uses `cl100k_base` (OpenAI). +4MB binary. Clean API.
+- `pkoukk/tiktoken-go` (885 stars): Most popular. Requires network call or +4MB offline loader.
+- Anthropic Token Counting API: Exact but requires network call.
+
+**Implementation**:
+```go
+func EstimateTokens(text string) int {
+    return int(math.Ceil(float64(len(text)) / 3.5))
+}
+```
+
+## R13: Automation Mode — Fixture File Design
+
+**Decision**: Support `sl revise --auto <fixture.json>` for non-interactive mode.
+
+**Rationale**: Enables CI integration, repeatable testing, and batch processing. The fixture file maps comment identifiers to processing decisions and guidance.
+
+**Fixture format**:
+```json
+{
+  "branch": "009-feature-name",
+  "comments": [
+    {
+      "file_path": "specledger/009-xxx/spec.md",
+      "selected_text": "some text the reviewer highlighted",
+      "guidance": "Replace with more specific language"
+    },
+    {
+      "file_path": "specledger/009-xxx/plan.md",
+      "selected_text": "another passage",
+      "guidance": ""
+    }
+  ]
+}
+```
+
+**Matching strategy**: Comments are matched by `file_path` + `selected_text` (not by UUID), since UUIDs are internal and not exposed to users. If multiple comments match the same file_path + selected_text pair, all are processed.
+
+**Flags**:
+- `--auto <fixture.json>`: Non-interactive mode, skips all TUI prompts
+- `--dry-run`: Output generated prompt to stdout/file, don't launch agent or resolve comments (works with or without `--auto`)
+
+## R14: Auth Auto-Retry on 401
+
+**Decision**: Wrap all PostgREST API calls with auto-retry on 401/PGRST303.
+
+**Rationale**: The coding agent session can run for 30+ minutes. Supabase access tokens have a short TTL (~30min). When the agent exits and `sl revise` resumes for the resolve step, the token will likely be expired. The existing `auth.GetValidAccessToken()` function already handles auto-refresh via the refresh token. Wrapping API calls to retry on 401 makes this transparent.
+
+**Implementation**: Add a `doWithRetry` helper to the `ReviseClient`:
+```go
+func (c *ReviseClient) doWithRetry(req *http.Request) (*http.Response, error) {
+    resp, err := c.client.Do(req)
+    if err != nil {
+        return nil, err
+    }
+    if resp.StatusCode == 401 || resp.StatusCode == 403 {
+        resp.Body.Close()
+        // Refresh token and retry
+        token, err := auth.GetValidAccessToken()
+        if err != nil {
+            return nil, fmt.Errorf("re-authentication failed: %w", err)
+        }
+        req.Header.Set("Authorization", "Bearer "+token)
+        return c.client.Do(req)
+    }
+    return resp, nil
+}
+```

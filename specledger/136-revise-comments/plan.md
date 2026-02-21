@@ -10,13 +10,13 @@ Add `sl revise` as a new Cobra subcommand in the Go CLI binary. The command fetc
 ## Technical Context
 
 **Language/Version**: Go 1.24.2
-**Primary Dependencies**: Cobra (CLI), Bubble Tea + Bubbles + Lipgloss (TUI), go-git/v5, `net/http` (PostgREST), `text/template` (prompt rendering), `os/exec` (editor + agent launch)
+**Primary Dependencies**: Cobra (CLI), Bubble Tea + Bubbles + Lipgloss + **Huh** (TUI/forms), go-git/v5, `net/http` (PostgREST), `text/template` (prompt rendering), `os/exec` (editor + agent launch)
 **Storage**: Supabase PostgreSQL via PostgREST REST API (remote); no local persistence
 **Testing**: `go test` with table-driven tests for API client, template rendering, token estimation; integration tests for the full command flow
 **Target Platform**: macOS, Linux (CLI binary distributed via GoReleaser + Homebrew)
 **Project Type**: Single Go module (existing CLI binary)
 **Performance Goals**: Comment fetch <5s (SC-001), full workflow <10min for 5 comments (SC-002)
-**Constraints**: Must preserve TTY when spawning editor and agent; no new external dependencies beyond what's already in go.mod
+**Constraints**: Must preserve TTY when spawning editor and agent; one new dependency (`charmbracelet/huh` for forms) beyond what's in go.mod
 **Scale/Scope**: Typically 1-20 comments per spec, 1-5 artifacts. Single user CLI.
 
 ## Constitution Check
@@ -58,35 +58,59 @@ pkg/cli/
 ├── commands/
 │   └── revise.go                    # NEW: sl revise command handler
 ├── revise/                          # NEW: revise package
-│   ├── client.go                    # PostgREST client for review_comments
-│   ├── types.go                     # ReviewComment, ProcessedComment, RevisionContext structs
-│   ├── prompt.go                    # Template rendering + token estimation
+│   ├── client.go                    # PostgREST client with auto-retry on 401
+│   ├── types.go                     # ReviewComment, ProcessedComment, RevisionContext, AutoFixture structs
+│   ├── prompt.go                    # Template rendering + token estimation (len/3.5 heuristic)
 │   ├── editor.go                    # Editor launch (temp file + $EDITOR)
 │   ├── git.go                       # Branch switching, stash, commit/push helpers
+│   ├── automation.go                # Fixture file parsing and non-interactive flow
 │   └── prompt.tmpl                  # Embedded Go template for revision prompt
 ├── launcher/
 │   └── launcher.go                  # MODIFY: Add LaunchWithPrompt(prompt string) method
 └── tui/
-    └── revise_select.go             # NEW: Multi-select model for artifact/comment selection
+    └── revise_forms.go              # NEW: huh-based forms for artifact selection, comment processing, resolution
 
 tests/
-└── unit/
-    └── revise/
-        ├── client_test.go           # PostgREST client tests (mock HTTP)
-        ├── prompt_test.go           # Template rendering + token estimation tests
-        └── git_test.go              # Git helper tests
+├── unit/
+│   └── revise/
+│       ├── prompt_test.go           # Phase A: Template rendering + token estimation (pure functions)
+│       ├── automation_test.go       # Phase A: Fixture parsing + snapshot tests
+│       └── client_test.go           # Phase B: PostgREST client tests (httptest mock)
+└── integration/
+    └── revise_test.go               # Phase B: Build binary, run --auto, verify stdout
 ```
 
 **Structure Decision**: Single Go module, new `pkg/cli/revise/` package for domain logic, command handler in `pkg/cli/commands/revise.go`. Follows existing patterns (auth, session).
 
+## Implementation Priority
+
+**Phase A — Functionality first** (this sprint):
+1. PostgREST client (`client.go`) + types (`types.go`)
+2. Command handler (`commands/revise.go`) + registration in `main.go`
+3. Git helpers (`git.go`) — branch detection, stash, checkout, commit/push
+4. TUI forms (`revise_forms.go`) — huh-based interactive prompts
+5. Prompt template (`prompt.go` + `prompt.tmpl`) + token estimation
+6. Editor launch (`editor.go`)
+7. Agent launcher extension (`LaunchWithPrompt`)
+8. Automation mode (`automation.go`) + `--auto` / `--dry-run` flags
+9. Lightweight tests: template rendering, token estimation, fixture parsing, snapshot tests via `--auto`
+
+**Phase B — Test infrastructure** (follow-up sprint):
+1. Establish `httptest.NewServer` mock pattern for PostgREST
+2. PostgREST client unit tests (mock fetch, resolve, 401 retry)
+3. Reusable `MockPostgREST` helper (benefits session package too)
+4. Integration tests (build binary, run `sl revise --auto`, verify stdout)
+5. CI pipeline update for integration tests
+
 ## Key Design Decisions
 
-### 1. PostgREST Client (`pkg/cli/revise/client.go`)
+### 1. PostgREST Client with Auth Auto-Retry (`pkg/cli/revise/client.go`)
 
-Follow the `session.MetadataClient` pattern:
+Follow the `session.MetadataClient` pattern with an added `doWithRetry` wrapper:
 - `ReviseClient` struct with `baseURL`, `anonKey`, `*http.Client`
 - Methods: `GetProject()`, `GetSpec()`, `GetChange()`, `FetchComments()`, `ResolveComment()`, `ListSpecsWithComments()`
 - Each method makes one HTTP call, returns typed structs
+- **All API calls wrapped with `doWithRetry`**: On 401/PGRST303, refresh the access token via `auth.GetValidAccessToken()` and retry once. This handles token expiry during long agent sessions.
 - Error handling: parse PostgREST error responses, map to user-friendly messages
 
 ### 2. Branch Selection Flow (`commands/revise.go`)
@@ -106,13 +130,23 @@ sl revise [optional-branch]
           └─ User selects → Check for uncommitted changes → Stash/checkout
 ```
 
-### 3. TUI Components
+### 3. TUI Components — `charmbracelet/huh` Forms
 
-- **Branch selector**: Simple `SelectPrompt` (existing) or Bubble Tea list for filtered branches
-- **Artifact multi-select**: New Bubble Tea model — checkboxes with `[x] spec.md (4 comments)` format
-- **Comment processing loop**: Sequential display with 3-option prompt (Process / Skip / Quit)
-- **Resolution multi-select**: Reuse artifact multi-select model for comment selection
-- **Confirm prompts**: Existing `tui.ConfirmPrompt()` for commit/push/stash
+New dependency: `go get github.com/charmbracelet/huh`
+
+All interactive prompts use `huh` form groups (replacing custom Bubble Tea models and `tui.ConfirmPrompt()`):
+
+- **Branch selector**: `huh.NewSelect[string]()` with branch names + unresolved comment counts
+- **Artifact multi-select**: `huh.NewMultiSelect[string]()` with options like `spec.md (4 comments)`
+- **Comment processing**: `huh.NewSelect[string]()` per comment with Process / Skip / Quit options
+- **Guidance input**: `huh.NewText()` (multi-line) when user selects "Process"
+- **Commit confirm**: `huh.NewConfirm()` for commit/push decision
+- **Resolution multi-select**: `huh.NewMultiSelect[string]()` for selecting comments to resolve
+- **Stash confirm**: `huh.NewSelect[string]()` with Stash / Abort / Continue options
+
+`huh` forms support forward/back navigation between groups and embed natively in Bubble Tea programs.
+
+**Future sprint**: Multi-pane TUI with artifact tree (left), comment detail (top-right), context (middle), controls (bottom). See research.md R11 for design notes and reference implementations.
 
 ### 4. Revision Prompt Template
 
@@ -136,6 +170,7 @@ For each comment below:
 3. Generate 2-3 distinct edit suggestions
 4. Use AskUserQuestion to present options and get the user's preference
 5. Apply the chosen edit
+6. Track every option proposed to user and their choices in a dedicated revision log, create if it doesn't exist yet.
 
 {{- range .Comments}}
 
@@ -151,11 +186,11 @@ For each comment below:
 ## Important Instructions
 - ALWAYS use AskUserQuestion before making any edit
 - Present clear, distinct options for each comment
-- Apply edits incrementally, one comment at a time
+- Apply edits incrementally, one comment at a time across all impacted artifacts
 - After all edits, summarize what was changed
 - Do NOT modify files beyond what the comments request
 
-Begin processing Comment 1.
+Begin processing first document and comment.
 ```
 
 ### 5. Agent Launch
@@ -174,27 +209,60 @@ func (l *AgentLauncher) LaunchWithPrompt(prompt string) error {
 
 Critical: prompt is passed as a positional argument (not stdin) to preserve TTY interactivity.
 
-### 6. Full Command Flow
+### 6. Token Estimation
+
+Simple character-based heuristic — no external library:
+```go
+func EstimateTokens(text string) int {
+    return int(math.Ceil(float64(len(text)) / 3.5))
+}
+```
+Per Anthropic's recommendation: ~3.5 characters per token, ~20% error margin. Zero binary size impact. See research.md R12 for alternatives evaluated.
+
+### 7. Automation Mode (`pkg/cli/revise/automation.go`)
+
+Fixture file format:
+```json
+{
+  "branch": "009-feature-name",
+  "comments": [
+    {"file_path": "specledger/009-xxx/spec.md", "selected_text": "highlighted text", "guidance": "Fix this"},
+    {"file_path": "specledger/009-xxx/plan.md", "selected_text": "another passage", "guidance": ""}
+  ]
+}
+```
+
+Flags:
+- `--auto <fixture.json>`: Non-interactive mode. Match comments by `file_path` + `selected_text`, generate prompt, print to **stdout**, exit. No agent launch, no resolution. Deterministic output enables **snapshot testing**.
+- `--dry-run`: Interactive mode variant. Goes through the full interactive flow (select, process, edit) but writes prompt to a file instead of launching the agent. No resolution.
+
+In `--auto` mode, steps 7-8 are fixture-driven and step 12 prints to stdout and exits. All subsequent steps (editor, agent, commit, resolve) are skipped.
+
+### 8. Full Command Flow
 
 ```
-1. Auth check (auth.GetValidAccessToken)
-2. Branch selection (resolve spec_key)
-3. Branch checkout if needed (stash → checkout)
-4. Fetch comments (project → spec → change → review_comments)
-5. Fast exit if no unresolved comments
-6. Artifact multi-select (show only artifacts with comments + counts)
-7. Comment processing loop (process/skip/quit per comment)
-8. If no comments processed → exit
-9. Generate combined prompt (render template)
-10. Show token estimate + warnings
-11. Open editor (temp file → $EDITOR → read back)
-12. Confirm/re-edit/cancel prompt
-13. Launch agent OR write prompt to file
-14. Post-agent: show git status summary
-15. Offer commit + push
-16. Comment resolution multi-select
-17. Resolve selected comments (PATCH API)
-18. Session end (stash pop reminder if applicable)
+1. Parse flags (--auto, --dry-run)
+2. Auth check (auth.GetValidAccessToken)
+3. Branch selection (resolve spec_key; from fixture.branch if --auto)
+4. Branch checkout if needed (stash → checkout)
+5. Fetch comments (project → spec → change → review_comments) [auto-retry on 401]
+6. Fast exit if no unresolved comments
+7. Artifact multi-select (huh form) — or fixture-driven if --auto
+8. Comment processing loop (huh form per comment) — or fixture-driven if --auto
+9. If no comments processed → exit
+10. Generate combined prompt (render template)
+11. Show token estimate + warnings (len/3.5 heuristic)
+12. If --auto → print prompt to stdout → exit (enables snapshot testing)
+13. Open editor (temp file → $EDITOR → read back)
+14. Confirm/re-edit/cancel prompt (huh confirm)
+15. If --dry-run → prompt for filename to write to → exit
+16. Launch agent OR prompt for filename to write to
+17. Post-agent: show git status summary
+18. Offer commit + push (huh confirm)
+19. Refresh auth token (auto-retry handles this transparently)
+20. Comment resolution multi-select (huh form)
+21. Resolve selected comments (PATCH API) [auto-retry on 401]
+22. Session end (stash pop reminder if applicable)
 ```
 
 ## Complexity Tracking

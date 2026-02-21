@@ -1,76 +1,506 @@
-# Quickstart: 136-revise-comments
+# sl revise — Quickstart Guide
+
+This quickstart shows how the user stories translate into CLI commands and interactive flows. It includes sample invocations, expected output, and the full workflow for processing review comments with an LLM agent.
 
 ## Prerequisites
 
-- Go 1.24+ installed
-- `sl auth login` completed (valid Supabase credentials)
-- On the `136-revise-comments` branch
-
-## Build & Run
-
 ```bash
-# Build the CLI
-go build -o sl ./cmd/sl/
+# Authenticate (one-time)
+sl auth login
 
-# Run revise on current branch
-./sl revise
-
-# Run revise on a specific branch
-./sl revise 009-feature-name
+# Verify
+sl auth status
+# Status: Signed in
+# Email:  you@example.com
+# Token:  Valid (expires in 29m0s)
 ```
 
-## Development Workflow
+---
 
-### 1. Create the revise package
+## Interactive Workflow
+
+> **Integration Test Target: MVP** (US1, US2, US3)
+>
+> Steps 1-3 below form the core integration test suite covering branch selection,
+> comment fetching, artifact selection, and interactive comment processing.
+
+### 1. Start a Revise Session (US1)
+
+**Scenario 1a: On a feature branch (most common)**
 
 ```bash
-mkdir -p pkg/cli/revise
+# Already on branch 009-feature-name
+sl revise
+
+# Output:
+# ✓ Authenticated as you@example.com
+#
+# Branch: 009-feature-name
+# Continue with this branch? [Y/n]: y
+#
+# Fetching comments for 009-feature-name...
+# ✓ Found 6 unresolved comments across 3 artifacts
 ```
 
-New files:
-- `pkg/cli/revise/types.go` — Data types (ReviewComment, ProcessedComment, RevisionContext)
-- `pkg/cli/revise/client.go` — PostgREST client (fetch comments, resolve)
-- `pkg/cli/revise/prompt.go` — Template rendering + token estimation
-- `pkg/cli/revise/prompt.tmpl` — Embedded Go template
-- `pkg/cli/revise/editor.go` — Editor launch helper
-- `pkg/cli/revise/git.go` — Git branch/stash/commit helpers
-
-### 2. Create the command
-
-- `pkg/cli/commands/revise.go` — Cobra command definition + main flow
-- Register in `cmd/sl/main.go`: `rootCmd.AddCommand(commands.VarReviseCmd)`
-
-### 3. Extend the launcher
-
-- Add `LaunchWithPrompt(prompt string) error` to `pkg/cli/launcher/launcher.go`
-
-### 4. Add TUI components
-
-- `pkg/cli/tui/revise_select.go` — Multi-select Bubble Tea model for artifact/comment selection
-
-## Testing
+**Scenario 1b: Specify branch directly**
 
 ```bash
-# Unit tests
-go test ./pkg/cli/revise/...
+sl revise 009-feature-name
 
-# Build and test manually
-go build -o sl ./cmd/sl/ && ./sl revise
+# Output:
+# ✓ Authenticated as you@example.com
+# Fetching comments for 009-feature-name...
+# ✓ Found 6 unresolved comments across 3 artifacts
 ```
 
-## Key API Endpoints
+**Scenario 1c: On main — pick from branches with comments**
 
-See [contracts/postgrest-api.md](./contracts/postgrest-api.md) for full API details.
-
-Quick test with curl:
 ```bash
-# Get your token
-TOKEN=$(sl auth token)
-URL=$(sl auth supabase --url)
-KEY=$(sl auth supabase --key)
+sl revise
 
-# Fetch unresolved comments for a spec
-curl -s "$URL/rest/v1/review_comments?change_id=eq.<change_id>&is_resolved=eq.false" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "apikey: $KEY" | jq
+# Output:
+# ✓ Authenticated as you@example.com
+#
+# You are on main. Select a branch to revise:
+#
+#   › 009-feature-name         (6 comments)
+#     006-oss-public-dashboard (8 comments)
+#     011-streamline-onboarding (3 comments)
+#
+# Use ↑↓ to navigate, Enter to select
+```
+
+**Scenario 1d: Not authenticated**
+
+```bash
+sl revise
+
+# ✗ Not authenticated. Run `sl auth login` first.
+```
+
+**Scenario 1e: No unresolved comments**
+
+```bash
+sl revise
+
+# ✓ Authenticated as you@example.com
+# Branch: 009-feature-name
+# Fetching comments...
+# ✓ No unresolved comments found. Nothing to do.
+```
+
+---
+
+### 2. Select Artifacts (US2)
+
+After comments are fetched, only artifacts with unresolved comments are shown:
+
+```bash
+# Select artifacts to process (toggle with Space, confirm with Enter):
+#
+#   [x] specledger/009-feature-name/spec.md       (4 comments)
+#   [ ] specledger/009-feature-name/plan.md        (1 comment)
+#   [x] specledger/009-feature-name/data-model.md  (1 comment)
+#
+# 2 artifacts selected, 5 comments to process
+```
+
+If all comments are already resolved:
+
+```bash
+# ✓ All comments are resolved. Nothing to process.
+```
+
+---
+
+### 3. Process Comments (US3)
+
+For each comment on the selected artifacts, you choose an action:
+
+```bash
+# ═══════════════════════════════════════════════════════════════════════════════
+# Comment 1 of 5 | spec.md
+# ═══════════════════════════════════════════════════════════════════════════════
+# Author: so0k | 2026-02-19 12:42
+# ───────────────────────────────────────────────────────────────────────────────
+# Selected: "when artifact content fails to load? Display an error message
+#            with a retry option"
+# ───────────────────────────────────────────────────────────────────────────────
+# Feedback: "this is unclear, artifact content is statically pre-generated
+#            in place - there is no retry"
+# ───────────────────────────────────────────────────────────────────────────────
+#
+# Action? [p]rocess / [s]kip / [q]uit: p
+# Guidance (optional, press Enter to skip): Remove retry language, clarify static generation
+#
+# ✓ Queued for processing with guidance
+```
+
+**Skip a comment:**
+
+```bash
+# ═══════════════════════════════════════════════════════════════════════════════
+# Comment 2 of 5 | spec.md
+# ═══════════════════════════════════════════════════════════════════════════════
+# Author: so0k | 2026-02-19 12:39
+# ───────────────────────────────────────────────────────────────────────────────
+# Selected: "and existing comments"
+# ───────────────────────────────────────────────────────────────────────────────
+# Feedback: "this is correct, these are beads comments in JSONL"
+# ───────────────────────────────────────────────────────────────────────────────
+#
+# Action? [p]rocess / [s]kip / [q]uit: s
+#
+# ⊘ Skipped
+```
+
+**Quit early:**
+
+```bash
+# Action? [p]rocess / [s]kip / [q]uit: q
+#
+# Exiting loop. 3 comments processed, 2 remaining.
+```
+
+**Edge case — selected text not found in file:**
+
+```bash
+# ═══════════════════════════════════════════════════════════════════════════════
+# Comment 3 of 5 | spec.md
+# ═══════════════════════════════════════════════════════════════════════════════
+# Author: Ngoc Tran | 2026-02-19 12:37
+# ───────────────────────────────────────────────────────────────────────────────
+# ⚠ Original selected text not found in current file version
+# Selected: "some text that was since removed"
+# ───────────────────────────────────────────────────────────────────────────────
+# Feedback: "this is not good"
+# ───────────────────────────────────────────────────────────────────────────────
+```
+
+---
+
+> **Integration Test Target: MVP Phase 2** (US4, US5)
+>
+> Steps 4-5 cover prompt generation, editor launch, and agent execution.
+
+### 4. Generate and Edit Revision Prompt (US4)
+
+After the processing loop, a combined prompt is generated:
+
+```bash
+# ───────────────────────────────────────────────────────────────────────────────
+# Revision Summary
+# ───────────────────────────────────────────────────────────────────────────────
+# Processed: 3 comments
+# Skipped:   2 comments
+#
+# Estimated tokens: ~1,240 (within recommended range)
+#
+# Edit prompt before launching agent? [Y/n]: y
+```
+
+Your configured editor opens with the rendered prompt:
+
+```bash
+# Launching $EDITOR (vim)...
+# [Editor opens with revision prompt content]
+# [User reviews, modifies if needed, saves and closes]
+```
+
+After the editor closes:
+
+```bash
+# ✓ Prompt updated (1,180 tokens)
+#
+# What would you like to do?
+#   › Launch Claude Code with this prompt
+#     Re-edit prompt
+#     Write prompt to file
+#     Cancel
+```
+
+**Token warnings:**
+
+```bash
+# ⚠ Estimated tokens: ~45 (very short — may lack sufficient context for the agent)
+```
+
+```bash
+# ⚠ Estimated tokens: ~12,400 (very long — may reduce agent effectiveness)
+```
+
+**Editor not found:**
+
+```bash
+# ⚠ No editor found ($EDITOR/$VISUAL not set, vi not available)
+# Prompt displayed below. Enter a filename to save it:
+# Filename: revision-prompt.md
+# ✓ Prompt saved to revision-prompt.md
+```
+
+---
+
+### 5. Launch Coding Agent (US5)
+
+```bash
+# Launching Claude Code with prompt...
+#
+# [Claude Code starts as interactive subprocess]
+# [Agent reads artifacts, generates edit suggestions]
+# [Agent uses AskUserQuestion for each comment]
+# [User approves/rejects edits interactively]
+# [Agent exits when done]
+```
+
+**Agent not configured:**
+
+```bash
+# ⚠ No coding agent configured.
+#   Configure one in specledger.yaml or set SPECLEDGER_AGENT environment variable.
+#   Install Claude Code: npm install -g @anthropic-ai/claude-code
+#
+# Enter a filename to write the prompt to: revision-prompt.md
+# ✓ Prompt saved to revision-prompt.md
+```
+
+---
+
+> **Integration Test Target: Phase 3** (US6)
+>
+> Steps 6-7 cover the post-agent commit/push and comment resolution flow.
+
+### 6. Commit and Push Changes (US6)
+
+After the agent exits, you see a summary of changes:
+
+```bash
+# ───────────────────────────────────────────────────────────────────────────────
+# Agent session complete. Changed files:
+# ───────────────────────────────────────────────────────────────────────────────
+#   M specledger/009-feature-name/spec.md
+#   M specledger/009-feature-name/data-model.md
+#
+# Commit and push these changes? [Y/n]: y
+# Commit message: Address review feedback on spec and data model
+#
+# ✓ Committed: a1b2c3d "Address review feedback on spec and data model"
+# ✓ Pushed to origin/009-feature-name
+```
+
+**Skip committing:**
+
+```bash
+# Commit and push these changes? [Y/n]: n
+#
+# ⚠ Changes not committed. Resolving comments without pushing may lead
+#   to inconsistencies on the remote.
+#
+# Proceed to resolve comments anyway? [y/N]: n
+# Unresolved comments remain. Re-run `sl revise` after pushing to resolve them.
+```
+
+---
+
+### 7. Resolve Comments (US6)
+
+After commit/push (or if skipped), select which comments to resolve:
+
+```bash
+# ───────────────────────────────────────────────────────────────────────────────
+# Mark comments as resolved
+# ───────────────────────────────────────────────────────────────────────────────
+# Select comments to resolve (toggle with Space, confirm with Enter):
+#
+#   [x] spec.md: "this is unclear, artifact content is statically..."
+#   [x] spec.md: "replace: ...by making \"public\" project..."
+#   [ ] data-model.md: "this is not good"
+#
+# 2 of 3 selected
+
+# Resolve 2 comments? [Y/n]: y
+# ✓ Resolved 2 comments
+# ⊘ 1 comment left unresolved
+```
+
+**Session end:**
+
+```bash
+# ───────────────────────────────────────────────────────────────────────────────
+# ✓ Revise session complete
+# ───────────────────────────────────────────────────────────────────────────────
+# Branch:     009-feature-name
+# Processed:  3 comments
+# Resolved:   2 comments
+# Files:      2 modified
+# Commit:     a1b2c3d
+#
+# 1 unresolved comment remains. Re-run `sl revise` to continue.
+```
+
+---
+
+## Branch Switching (US7)
+
+When you select a branch different from your current one:
+
+**No uncommitted changes:**
+
+```bash
+# Switching to branch 009-feature-name...
+# ✓ Checked out 009-feature-name
+```
+
+**Uncommitted changes detected:**
+
+```bash
+# ⚠ You have uncommitted changes:
+#   M  pkg/cli/commands/auth.go
+#   M  pkg/cli/session/capture.go
+#
+# What would you like to do?
+#   › Stash changes and switch
+#     Abort (stay on current branch)
+#     Continue anyway (risk conflicts)
+#
+# ✓ Changes stashed
+# ✓ Checked out 009-feature-name
+```
+
+**At session end (if stashed):**
+
+```bash
+# ⚠ You have stashed changes. Run `git stash pop` to restore them.
+```
+
+**Remote-only branch:**
+
+```bash
+# Branch 042-new-feature exists on remote but not locally.
+# Fetching and checking out...
+# ✓ Created local branch 042-new-feature tracking origin/042-new-feature
+```
+
+---
+
+## Automation Mode (US8)
+
+For CI pipelines, testing, and non-interactive use.
+
+### Fixture File Format
+
+```json
+{
+  "branch": "009-feature-name",
+  "comments": [
+    {
+      "file_path": "specledger/009-feature-name/spec.md",
+      "selected_text": "when artifact content fails to load",
+      "guidance": "Remove retry language — content is statically pre-generated"
+    },
+    {
+      "file_path": "specledger/009-feature-name/spec.md",
+      "selected_text": "by making project",
+      "guidance": "Replace with: by making \"public\" project"
+    }
+  ]
+}
+```
+
+### Generate Prompt (stdout)
+
+```bash
+sl revise --auto fixture.json
+
+# Outputs the rendered revision prompt to stdout (no agent launched, no
+# comments resolved). Deterministic output for snapshot testing.
+```
+
+### Snapshot Testing
+
+```bash
+# Generate and save expected output
+sl revise --auto fixture.json > expected-prompt.txt
+
+# After code changes, verify prompt hasn't regressed
+sl revise --auto fixture.json > actual-prompt.txt
+diff expected-prompt.txt actual-prompt.txt
+```
+
+### Fixture Warnings
+
+```bash
+sl revise --auto fixture.json
+
+# ⚠ Comment not found (skipped): file_path="spec.md", selected_text="removed text"
+# ⚠ Comment already resolved (skipped): file_path="spec.md", selected_text="old feedback"
+# ✓ Matched 2 of 4 fixture comments
+# [prompt output follows on stdout]
+```
+
+---
+
+## Dry Run (Interactive)
+
+Go through the full interactive flow but write the prompt to a file instead of launching the agent:
+
+```bash
+sl revise --dry-run
+
+# [Normal interactive flow: branch selection, artifact selection, comment processing]
+# ...
+#
+# Enter a filename to save the prompt: revision-prompt.md
+# ✓ Prompt saved to revision-prompt.md (1,240 tokens)
+# No agent launched. No comments resolved.
+```
+
+---
+
+## Error Handling
+
+**Token expired mid-session:**
+
+```bash
+# [Transparent — auto-refreshes on 401 and retries the request]
+# No user action needed unless refresh token is also expired:
+#
+# ✗ Session expired. Run `sl auth login` to re-authenticate.
+```
+
+**Network error:**
+
+```bash
+# ✗ Failed to fetch comments: connection refused
+#   Check your network connection and try again.
+```
+
+**File referenced by comment no longer exists:**
+
+```bash
+# ═══════════════════════════════════════════════════════════════════════════════
+# Comment 4 of 5 | old-spec.md
+# ═══════════════════════════════════════════════════════════════════════════════
+# ⚠ File not found locally: specledger/009-feature-name/old-spec.md
+# ...
+```
+
+---
+
+## Command Reference
+
+```
+sl revise [branch-name] [flags]
+
+Arguments:
+  branch-name    Target branch (optional; auto-detected from current branch)
+
+Flags:
+  --auto <file>  Non-interactive mode with fixture file (outputs prompt to stdout)
+  --dry-run      Interactive flow but write prompt to file instead of launching agent
+
+Examples:
+  sl revise                          # Auto-detect branch, interactive
+  sl revise 009-feature-name         # Specify branch, interactive
+  sl revise --dry-run                # Interactive, save prompt to file
+  sl revise --auto fixture.json      # Non-interactive, prompt to stdout
 ```

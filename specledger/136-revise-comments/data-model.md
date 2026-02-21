@@ -99,6 +99,25 @@ type PromptComment struct {
 }
 ```
 
+### AutoFixture
+
+Fixture file structure for non-interactive automation mode.
+
+```go
+type AutoFixture struct {
+    Branch   string           `json:"branch"`    // Target branch name
+    Comments []FixtureComment `json:"comments"`  // Comments to process
+}
+
+type FixtureComment struct {
+    FilePath     string `json:"file_path"`      // Artifact file path (for matching)
+    SelectedText string `json:"selected_text"`  // Text passage (for matching)
+    Guidance     string `json:"guidance"`        // Optional guidance for LLM
+}
+```
+
+Comments are matched against fetched review comments by `file_path` + `selected_text` (not by UUID, since IDs are internal).
+
 ## Query Patterns
 
 ### Fetch unresolved comments for a spec
