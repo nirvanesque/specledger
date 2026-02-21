@@ -103,8 +103,9 @@ As a developer whose coding agent has finished making changes, I want help commi
 
 **Acceptance Scenarios**:
 
-1. **Given** the agent has exited and files have been modified, **When** control returns to `sl revise`, **Then** I see a summary of changed files (like `git status`) and am offered to commit and push them.
-2. **Given** I choose to commit, **When** I confirm, **Then** the changes are committed with a descriptive message and pushed to the current branch.
+1. **Given** the agent has exited and files have been modified, **When** control returns to `sl revise`, **Then** I see a summary of changed files (like `git status`) and am offered to commit and push.
+2. **Given** I choose to commit, **When** the file list is shown, **Then** I see a multi-select of changed files to stage, can confirm or skip individual files, enter a commit message, and push to the current branch.
+2a. **Given** I choose to skip committing entirely, **Then** no files are staged and the flow proceeds to resolution.
 3. **Given** I choose to skip committing, **When** I proceed to the resolve step, **Then** I see a warning that resolving comments without pushing changes may lead to inconsistencies, with options to proceed or defer.
 4. **Given** the commit/push step is complete (or skipped), **When** I reach the resolve step, **Then** I see a multi-select list of the processed comments and can choose which ones to mark as resolved.
 5. **Given** I select 2 of 3 comments to resolve, **When** I confirm, **Then** only those 2 are marked as resolved in the remote system.

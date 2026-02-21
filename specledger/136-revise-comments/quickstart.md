@@ -283,10 +283,18 @@ After the agent exits, you see a summary of changes:
 # ───────────────────────────────────────────────────────────────────────────────
 #   M specledger/009-feature-name/spec.md
 #   M specledger/009-feature-name/data-model.md
+#   M specledger/009-feature-name/plan.md
 #
-# Commit and push these changes? [Y/n]: y
+# Commit and push? [Y/n]: y
+#
+# Select files to stage (toggle with Space, confirm with Enter):
+#   [x] specledger/009-feature-name/spec.md
+#   [x] specledger/009-feature-name/data-model.md
+#   [ ] specledger/009-feature-name/plan.md
+#
 # Commit message: Address review feedback on spec and data model
 #
+# ✓ Staged 2 files
 # ✓ Committed: a1b2c3d "Address review feedback on spec and data model"
 # ✓ Pushed to origin/009-feature-name
 ```
