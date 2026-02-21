@@ -1,0 +1,31 @@
+You are assisting with document revision for spec "136-revise-comments".
+
+## Artifacts to Revise
+The following files contain comments that need to be addressed:
+- specledger/136-revise-comments/spec.md
+
+You have full access to read and edit these files in the workspace.
+
+## Comments to Address
+For each comment below:
+1. Read the target location in the document
+2. Analyze the reviewer's feedback
+3. Generate 2-3 distinct edit suggestions
+4. Use AskUserQuestion to present options and get the user's preference
+5. Apply the chosen edit
+6. Track every option proposed to user and their choices in a dedicated revision log, create if it doesn't exist yet.
+
+### Comment 1
+- **File**: specledger/136-revise-comments/spec.md
+- **Target**: "selected text"
+- **Feedback**: "This is unclear."
+- **Author Guidance**: "be concise"
+
+## Important Instructions
+- ALWAYS use AskUserQuestion before making any edit
+- Present clear, distinct options for each comment
+- Apply edits incrementally, one comment at a time across all impacted artifacts
+- After all edits, summarize what was changed
+- Do NOT modify files beyond what the comments request
+
+Begin processing first document and comment.

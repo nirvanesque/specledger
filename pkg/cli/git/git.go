@@ -1,4 +1,15 @@
-package revise
+// Package git provides Git helper functions for working with the user's local repository.
+//
+// This package is intentionally separate from pkg/deps (which manages external
+// dependency repos — clone, fetch, checkout remote specs) because it operates on
+// a fundamentally different concern: the user's own working repository. Functions
+// here cover day-to-day CLI operations such as branch detection, status inspection,
+// stash, commit, and push — all on the repo the user has open in their shell.
+//
+// Any CLI command that needs to interact with the user's local repo (sl revise,
+// sl session, etc.) should import from this package rather than duplicating logic
+// or adding working-repo helpers to pkg/deps.
+package git
 
 import (
 	"fmt"
@@ -74,6 +85,7 @@ func BranchExists(repoPath, name string) (bool, error) {
 }
 
 // GetCurrentBranch returns the short name of the current branch (e.g., "136-revise-comments").
+// Returns an 8-character commit hash prefix when HEAD is detached.
 func GetCurrentBranch(repoPath string) (string, error) {
 	repo, err := openRepo(repoPath)
 	if err != nil {
@@ -118,6 +130,34 @@ func HasUncommittedChanges(repoPath string) (bool, error) {
 	return !status.IsClean(), nil
 }
 
+// GetChangedFiles returns the relative paths of all files with uncommitted changes
+// (modified, added, deleted, or untracked) in the working tree or staging area.
+func GetChangedFiles(repoPath string) ([]string, error) {
+	repo, err := openRepo(repoPath)
+	if err != nil {
+		return nil, err
+	}
+
+	wt, err := repo.Worktree()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get worktree: %w", err)
+	}
+
+	status, err := wt.Status()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get status: %w", err)
+	}
+
+	paths := make([]string, 0, len(status))
+	for path, fs := range status {
+		if fs.Staging != gogit.Unmodified || fs.Worktree != gogit.Unmodified {
+			paths = append(paths, path)
+		}
+	}
+
+	return paths, nil
+}
+
 // CheckoutBranch checks out a local branch by name using go-git.
 // Use CheckoutRemoteTracking for branches that only exist on the remote.
 func CheckoutBranch(repoPath, name string) error {
@@ -144,7 +184,7 @@ func CheckoutBranch(repoPath, name string) error {
 }
 
 // StashChanges stashes all uncommitted changes.
-// Uses exec (go-git does not implement stash; see go-git issue #606).
+// Uses exec because go-git does not implement stash (see go-git issue #606).
 func StashChanges(repoPath string) error {
 	// #nosec G204 — repoPath is from a controlled call site (working directory), not user input
 	cmd := exec.Command("git", "stash", "push", "--include-untracked", "-m", "sl revise: auto-stash")
@@ -156,7 +196,7 @@ func StashChanges(repoPath string) error {
 }
 
 // StashPop re-applies the most recent stash.
-// Uses exec (go-git does not implement stash; see go-git issue #606).
+// Uses exec because go-git does not implement stash (see go-git issue #606).
 func StashPop(repoPath string) error {
 	// #nosec G204 — repoPath is from a controlled call site
 	cmd := exec.Command("git", "stash", "pop")
@@ -200,23 +240,23 @@ func AddFiles(repoPath string, paths []string) error {
 	return nil
 }
 
-// CommitChanges creates a commit with the staged changes.
-// Author info is read from the repository's global git config.
-func CommitChanges(repoPath, message string) error {
+// CommitChanges creates a commit with the staged changes and returns the short (8-char) commit hash.
+// Author info is read from the repository's global git config, with fallbacks to "SpecLedger".
+func CommitChanges(repoPath, message string) (string, error) {
 	repo, err := openRepo(repoPath)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	wt, err := repo.Worktree()
 	if err != nil {
-		return fmt.Errorf("failed to get worktree: %w", err)
+		return "", fmt.Errorf("failed to get worktree: %w", err)
 	}
 
 	// Read author info from global git config
 	cfg, err := repo.ConfigScoped(gogitconfig.GlobalScope)
 	if err != nil {
-		return fmt.Errorf("failed to read git config: %w", err)
+		return "", fmt.Errorf("failed to read git config: %w", err)
 	}
 
 	name := cfg.User.Name
@@ -228,7 +268,7 @@ func CommitChanges(repoPath, message string) error {
 		email = "noreply@specledger.io"
 	}
 
-	_, err = wt.Commit(message, &gogit.CommitOptions{
+	hash, err := wt.Commit(message, &gogit.CommitOptions{
 		Author: &object.Signature{
 			Name:  name,
 			Email: email,
@@ -236,14 +276,15 @@ func CommitChanges(repoPath, message string) error {
 		},
 	})
 	if err != nil {
-		return fmt.Errorf("failed to commit: %w", err)
+		return "", fmt.Errorf("failed to commit: %w", err)
 	}
 
-	return nil
+	return hash.String()[:8], nil
 }
 
 // PushToRemote pushes the current branch to the origin remote.
-// Uses exec for reliable credential helper and SSH agent support.
+// Uses exec for reliable credential helper and SSH agent support (go-git push
+// does not work reliably with macOS Keychain and HTTPS credential helpers).
 func PushToRemote(repoPath string) error {
 	// #nosec G204 — repoPath is from a controlled call site
 	cmd := exec.Command("git", "push")

@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/specledger/specledger/pkg/cli/auth"
+	cligit "github.com/specledger/specledger/pkg/cli/git"
 	"github.com/specledger/specledger/pkg/cli/launcher"
 	"github.com/specledger/specledger/pkg/cli/revise"
 	"github.com/spf13/cobra"
@@ -136,31 +137,244 @@ func runRevise(cmd *cobra.Command, args []string) error {
 	tokens := revise.EstimateTokens(prompt)
 	revise.PrintTokenWarnings(tokens)
 
-	// Step 8: Open editor for prompt refinement; confirm/re-edit/write-to-file/cancel
+	// Step 8: Open editor for prompt refinement; confirm/re-edit/write-to-file/cancel.
+	// TODO(M6): pass reviseDryRun once editAndConfirmPrompt accepts the parameter.
 	finalPrompt, err := editAndConfirmPrompt(prompt)
 	if err != nil {
 		return err
 	}
 	if finalPrompt == "" {
-		// User wrote to file or cancelled
+		// User wrote to file (dry-run or manual), or cancelled.
 		return nil
 	}
 
-	// Step 9: Launch agent (US5)
-	changesAfterAgent, err := launchReviseAgent(cwd, finalPrompt)
+	// Step 9: Launch agent (US5) — inlined, called exactly once.
+	agentCmd := os.Getenv("SPECLEDGER_AGENT")
+	var agentOpt launcher.AgentOption
+	if agentCmd != "" {
+		agentOpt = launcher.AgentOption{Name: agentCmd, Command: agentCmd}
+	} else {
+		for _, a := range launcher.DefaultAgents {
+			if a.Command == "" {
+				continue
+			}
+			al := launcher.NewAgentLauncher(a, cwd)
+			if al.IsAvailable() {
+				agentOpt = a
+				break
+			}
+		}
+	}
+
+	al := launcher.NewAgentLauncher(agentOpt, cwd)
+	if !al.IsAvailable() {
+		fmt.Printf("No AI agent found. Install with: %s\n", al.InstallInstructions())
+		return writePromptToFile(finalPrompt)
+	}
+
+	fmt.Printf("Launching %s...\n", al.Name)
+	if err := al.LaunchWithPrompt(finalPrompt); err != nil {
+		return fmt.Errorf("agent exited with error: %w", err)
+	}
+
+	changesAfterAgent, err := cligit.HasUncommittedChanges(cwd)
 	if err != nil {
+		return fmt.Errorf("failed to check git status after agent: %w", err)
+	}
+
+	// US6: File staging, commit, and push (sl-ssr)
+	if changesAfterAgent {
+		committed, err := stagingAndCommitFlow(cwd)
+		if err != nil {
+			return err
+		}
+
+		if !committed {
+			// FR-019: warn that resolving without pushing may cause inconsistencies,
+			// then give the user a chance to bail out (default: No = defer entirely).
+			fmt.Println("\n⚠ Changes not committed. Resolving comments without pushing may lead")
+			fmt.Println("  to inconsistencies on the remote.")
+			fmt.Println()
+
+			var proceedAnyway bool
+			err = huh.NewForm(huh.NewGroup(
+				huh.NewConfirm().
+					Title("Proceed to resolve comments anyway?").
+					Value(&proceedAnyway), // default false → No
+			)).Run()
+			if err != nil {
+				return fmt.Errorf("proceed confirmation: %w", err)
+			}
+
+			if !proceedAnyway {
+				fmt.Println("Unresolved comments remain. Re-run `sl revise` after pushing to resolve them.")
+				if stashUsed {
+					fmt.Println("\nYou have stashed changes. Run 'git stash pop' to restore them.")
+				}
+				return nil
+			}
+		}
+	}
+
+	// US6: Comment resolution multi-select (sl-x1o)
+	if err := commentResolutionFlow(processed, client, stashUsed); err != nil {
 		return err
 	}
 
-	// Placeholder for US6 (commit/push + comment resolution)
-	if changesAfterAgent {
-		fmt.Println("(commit/push flow not yet implemented)")
-	}
-	fmt.Println("(comment resolution not yet implemented)")
+	return nil
+}
 
-	// Session end: remind user to pop stash if applicable
+// stagingAndCommitFlow prints changed files, asks the user whether to commit,
+// and if confirmed: shows a file multi-select, prompts for a commit message,
+// then stages/commits/pushes. Returns committed=true when a commit was made,
+// false when the user chose to skip (triggering the FR-019 second confirm in the caller).
+func stagingAndCommitFlow(cwd string) (committed bool, err error) {
+	changedFiles, err := cligit.GetChangedFiles(cwd)
+	if err != nil {
+		return false, fmt.Errorf("failed to list changed files: %w", err)
+	}
+
+	if len(changedFiles) == 0 {
+		return true, nil // nothing uncommitted — treat as committed
+	}
+
+	// Print changed-files summary (mirrors quickstart §6 output)
+	fmt.Println("\nAgent session complete. Changed files:")
+	for _, f := range changedFiles {
+		fmt.Printf("  M %s\n", f)
+	}
+	fmt.Println()
+
+	// First confirm: commit and push?
+	var doCommit bool
+	err = huh.NewForm(huh.NewGroup(
+		huh.NewConfirm().
+			Title("Commit and push?").
+			Value(&doCommit),
+	)).Run()
+	if err != nil {
+		return false, fmt.Errorf("commit confirmation: %w", err)
+	}
+
+	if !doCommit {
+		return false, nil // caller handles FR-019 second confirm
+	}
+
+	// File multi-select — all pre-selected
+	options := make([]huh.Option[string], 0, len(changedFiles))
+	for _, f := range changedFiles {
+		options = append(options, huh.NewOption(f, f).Selected(true))
+	}
+
+	selected := make([]string, 0, len(changedFiles))
+	err = huh.NewForm(huh.NewGroup(
+		huh.NewMultiSelect[string]().
+			Title("Select files to stage").
+			Description("All changed files are pre-selected. Deselect any you want to leave uncommitted.").
+			Options(options...).
+			Value(&selected),
+	)).Run()
+	if err != nil {
+		return false, fmt.Errorf("file selection: %w", err)
+	}
+
+	if len(selected) == 0 {
+		return false, nil // nothing staged — treat same as skipping commit
+	}
+
+	// Commit message
+	var commitMsg string
+	err = huh.NewForm(huh.NewGroup(
+		huh.NewInput().
+			Title("Commit message").
+			Placeholder("feat: address review feedback").
+			Value(&commitMsg),
+	)).Run()
+	if err != nil {
+		return false, fmt.Errorf("commit message input: %w", err)
+	}
+
+	if commitMsg == "" {
+		commitMsg = "feat: address review feedback"
+	}
+
+	if err := cligit.AddFiles(cwd, selected); err != nil {
+		return false, fmt.Errorf("failed to stage files: %w", err)
+	}
+
+	hash, err := cligit.CommitChanges(cwd, commitMsg)
+	if err != nil {
+		return false, fmt.Errorf("failed to commit: %w", err)
+	}
+	fmt.Printf("✓ Committed %s: %s\n", hash, commitMsg)
+
+	fmt.Print("Pushing to remote... ")
+	if err := cligit.PushToRemote(cwd); err != nil {
+		return false, fmt.Errorf("push failed: %w", err)
+	}
+	fmt.Println("✓ Pushed to remote.")
+
+	return true, nil
+}
+
+// commentResolutionFlow shows a multi-select of processed comments and marks the
+// selected ones as resolved via the API (FR-017, FR-018, FR-021).
+// Prints the stash pop reminder at session end if stashUsed.
+func commentResolutionFlow(processed []revise.ProcessedComment, client *revise.ReviseClient, stashUsed bool) error {
+	if len(processed) == 0 {
+		return nil
+	}
+
+	options := make([]huh.Option[string], 0, len(processed))
+	for _, p := range processed {
+		label := p.Comment.FilePath
+		if p.Comment.SelectedText != "" {
+			excerpt := p.Comment.SelectedText
+			if len(excerpt) > 40 {
+				excerpt = excerpt[:37] + "..."
+			}
+			label = fmt.Sprintf("%s — %q", p.Comment.FilePath, excerpt)
+		}
+		options = append(options, huh.NewOption(label, p.Comment.ID).Selected(true))
+	}
+
+	selected := make([]string, 0, len(processed))
+	err := huh.NewForm(huh.NewGroup(
+		huh.NewMultiSelect[string]().
+			Title("Mark comments as resolved?").
+			Description("Select the comments that were successfully addressed by the agent.").
+			Options(options...).
+			Value(&selected),
+	)).Run()
+	if err != nil {
+		return fmt.Errorf("resolution selection: %w", err)
+	}
+
+	if len(selected) == 0 {
+		// FR-021: all deferred
+		fmt.Println("Unresolved comments remain. Re-run sl revise after pushing to resolve them.")
+		if stashUsed {
+			fmt.Println("\nYou have stashed changes. Run 'git stash pop' to restore them.")
+		}
+		return nil
+	}
+
+	resolved := 0
+	for _, id := range selected {
+		if err := client.ResolveComment(id); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: failed to resolve comment %s: %v\n", id, err)
+			continue
+		}
+		resolved++
+	}
+
+	fmt.Printf("Resolved %d of %d comment(s).\n", resolved, len(processed))
+	if resolved < len(processed) {
+		fmt.Println("Unresolved comments remain. Re-run sl revise after pushing to resolve them.")
+	}
+
 	if stashUsed {
-		fmt.Println("\nNote: You have stashed changes. Run 'git stash pop' to restore them.")
+		fmt.Println("\nYou have stashed changes. Run 'git stash pop' to restore them.")
 	}
 
 	return nil
@@ -174,13 +388,13 @@ func resolveBranch(cwd string, args []string, client *revise.ReviseClient) (spec
 		return args[0], "", nil
 	}
 
-	currentBranch, err := revise.GetCurrentBranch(cwd)
+	currentBranch, err := cligit.GetCurrentBranch(cwd)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to detect current branch: %w", err)
 	}
 
 	// On a feature branch: confirm with user
-	if revise.IsFeatureBranch(currentBranch) {
+	if cligit.IsFeatureBranch(currentBranch) {
 		confirmed := true
 		err = huh.NewForm(huh.NewGroup(
 			huh.NewConfirm().
@@ -203,7 +417,7 @@ func resolveBranch(cwd string, args []string, client *revise.ReviseClient) (spec
 
 // pickBranchFromAPI fetches specs with unresolved comments and shows a branch picker.
 func pickBranchFromAPI(cwd, currentBranch string, client *revise.ReviseClient) (specKey, targetBranch string, err error) {
-	repoOwner, repoName, err := revise.GetRepoOwnerName(cwd)
+	repoOwner, repoName, err := cligit.GetRepoOwnerName(cwd)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to detect repo: %w", err)
 	}
@@ -254,7 +468,7 @@ func checkoutIfNeeded(cwd, targetBranch string) (stashUsed bool, err error) {
 		return false, nil
 	}
 
-	dirty, err := revise.HasUncommittedChanges(cwd)
+	dirty, err := cligit.HasUncommittedChanges(cwd)
 	if err != nil {
 		return false, fmt.Errorf("failed to check git status: %w", err)
 	}
@@ -288,7 +502,7 @@ func checkoutIfNeeded(cwd, targetBranch string) (stashUsed bool, err error) {
 		case actionContinue:
 			return false, nil
 		case actionStash:
-			if err := revise.StashChanges(cwd); err != nil {
+			if err := cligit.StashChanges(cwd); err != nil {
 				return false, fmt.Errorf("stash failed: %w", err)
 			}
 			stashUsed = true
@@ -296,17 +510,17 @@ func checkoutIfNeeded(cwd, targetBranch string) (stashUsed bool, err error) {
 	}
 
 	// Checkout: try local first, fall back to remote tracking
-	exists, err := revise.BranchExists(cwd, targetBranch)
+	exists, err := cligit.BranchExists(cwd, targetBranch)
 	if err != nil {
 		return stashUsed, fmt.Errorf("failed to check branch existence: %w", err)
 	}
 
 	if exists {
-		if err := revise.CheckoutBranch(cwd, targetBranch); err != nil {
+		if err := cligit.CheckoutBranch(cwd, targetBranch); err != nil {
 			return stashUsed, fmt.Errorf("checkout failed: %w", err)
 		}
 	} else {
-		if err := revise.CheckoutRemoteTracking(cwd, targetBranch); err != nil {
+		if err := cligit.CheckoutRemoteTracking(cwd, targetBranch); err != nil {
 			return stashUsed, fmt.Errorf("remote checkout failed: %w", err)
 		}
 	}
@@ -317,7 +531,7 @@ func checkoutIfNeeded(cwd, targetBranch string) (stashUsed bool, err error) {
 
 // fetchComments runs the 4-step PostgREST query chain and returns unresolved comments.
 func fetchComments(cwd, specKey string, client *revise.ReviseClient) ([]revise.ReviewComment, error) {
-	repoOwner, repoName, err := revise.GetRepoOwnerName(cwd)
+	repoOwner, repoName, err := cligit.GetRepoOwnerName(cwd)
 	if err != nil {
 		return nil, fmt.Errorf("failed to detect repo: %w", err)
 	}
@@ -495,48 +709,6 @@ func processComments(comments []revise.ReviewComment) ([]revise.ProcessedComment
 	return processed, nil
 }
 
-// launchReviseAgent finds the configured agent, spawns it with the prompt, and reports
-// whether the working tree is dirty after the agent exits (plan.md §8 step 17).
-// Returns (hasChanges, error). If no agent is available, offers to write prompt to file.
-func launchReviseAgent(cwd, prompt string) (bool, error) {
-	agentCmd := os.Getenv("SPECLEDGER_AGENT")
-	var agent launcher.AgentOption
-	if agentCmd != "" {
-		agent = launcher.AgentOption{Name: agentCmd, Command: agentCmd}
-	} else {
-		// Use first available default agent
-		for _, a := range launcher.DefaultAgents {
-			if a.Command == "" {
-				continue
-			}
-			l := launcher.NewAgentLauncher(a, cwd)
-			if l.IsAvailable() {
-				agent = a
-				break
-			}
-		}
-	}
-
-	l := launcher.NewAgentLauncher(agent, cwd)
-	if !l.IsAvailable() {
-		fmt.Printf("No AI agent found. Install with: %s\n", l.InstallInstructions())
-		return false, writePromptToFile(prompt)
-	}
-
-	fmt.Printf("Launching %s...\n", l.Name)
-	if err := l.LaunchWithPrompt(prompt); err != nil {
-		return false, fmt.Errorf("agent exited with error: %w", err)
-	}
-
-	// Detect whether agent left uncommitted changes
-	dirty, err := revise.HasUncommittedChanges(cwd)
-	if err != nil {
-		return false, fmt.Errorf("failed to check git status after agent: %w", err)
-	}
-
-	return dirty, nil
-}
-
 // runAuto handles --auto mode: fixture-driven, non-interactive, prints prompt to stdout.
 func runAuto(cwd string, args []string, fixturePath string) error {
 	accessToken, err := auth.GetValidAccessToken()
@@ -557,7 +729,7 @@ func runAuto(cwd string, args []string, fixturePath string) error {
 		specKey = args[0]
 	}
 	if specKey == "" {
-		specKey, err = revise.GetCurrentBranch(cwd)
+		specKey, err = cligit.GetCurrentBranch(cwd)
 		if err != nil {
 			return fmt.Errorf("failed to detect branch: %w", err)
 		}
@@ -699,7 +871,7 @@ func runSummary(cwd string, args []string) error {
 	if len(args) > 0 {
 		specKey = args[0]
 	} else {
-		currentBranch, err := revise.GetCurrentBranch(cwd)
+		currentBranch, err := cligit.GetCurrentBranch(cwd)
 		if err != nil {
 			os.Exit(1)
 			return nil
