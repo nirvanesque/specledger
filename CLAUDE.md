@@ -45,3 +45,10 @@ make install        # Install sl to $GOBIN
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->
+
+## Active Technologies
+- Go 1.24.2 + Cobra (CLI), YAML v3 (config), JSONL (storage) (597-issue-create-fields)
+- File-based JSONL at `specledger/<spec>/issues.jsonl` (597-issue-create-fields)
+
+## Recent Changes
+- 597-issue-create-fields: Added Go 1.24.2 + Cobra (CLI), YAML v3 (config), JSONL (storage)
