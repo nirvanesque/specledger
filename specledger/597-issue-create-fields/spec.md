@@ -12,24 +12,26 @@
 - Q: How should multiple Definition of Done items be provided via the CLI flag? → A: Repeated flags (e.g., `--dod "Item 1" --dod "Item 2"`) using Cobra StringArray pattern
 - Q: How should --check-dod and --uncheck-dod match DoD item text? → A: Exact match including case and whitespace (no normalization)
 - Q: What should happen when --check-dod is called with text that doesn't match any DoD item? → A: Return error with clear message: "DoD item not found: 'text'"
+- Q: Should --notes flag be included in scope alongside the 3 structured fields? → A: Yes, include --notes in US1 acceptance scenarios
 
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Create Issues with Complete Field Set (Priority: P1)
 
-As a developer using SpecLedger, I want to create issues with all available structured fields (`--acceptance-criteria`, `--dod`, `--design`) in a single command so that I don't have to update issues immediately after creation.
+As a developer using SpecLedger, I want to create issues with all available structured fields (`--acceptance-criteria`, `--dod`, `--design`, `--notes`) in a single command so that I don't have to update issues immediately after creation.
 
-**Why this priority**: This is the core functionality gap. Users currently cannot set acceptance criteria, definition of done, or design notes during issue creation, forcing a two-step workflow (create then update). Fixing this enables the full potential of the issue model.
+**Why this priority**: This is the core functionality gap. Users currently cannot set acceptance criteria, definition of done, design notes, or notes during issue creation, forcing a two-step workflow (create then update). Fixing this enables the full potential of the issue model.
 
-**Independent Test**: Can be fully tested by creating an issue with all 3 new flags and verifying each field is persisted correctly in the JSONL file. Delivers immediate value by eliminating the create-then-update pattern.
+**Independent Test**: Can be fully tested by creating an issue with all 4 new flags and verifying each field is persisted correctly in the JSONL file. Delivers immediate value by eliminating the create-then-update pattern.
 
 **Acceptance Scenarios**:
 
 1. **Given** a user wants to create a fully-specified issue, **When** they run `sl issue create --title "Task" --acceptance-criteria "AC text" --type task`, **Then** the created issue has the acceptance_criteria field populated
 2. **Given** a user wants to create an issue with definition of done items, **When** they run `sl issue create --title "Task" --dod "Item 1" --dod "Item 2" --type task`, **Then** the created issue has definition_of_done.items containing both items as unchecked
 3. **Given** a user wants to create an issue with design notes, **When** they run `sl issue create --title "Task" --design "Design approach details" --type task`, **Then** the created issue has the design field populated
-4. **Given** a user creates an issue with all 3 structured fields combined, **When** they run `sl issue create --title "Task" --acceptance-criteria "AC" --dod "DoD1" --design "Design" --type task`, **Then** all 3 fields are persisted correctly
-5. **Given** a user creates an issue with all new fields, **When** they run `sl issue show` on the created issue, **Then** acceptance_criteria, definition_of_done, and design are displayed in dedicated sections
+4. **Given** a user wants to create an issue with implementation notes, **When** they run `sl issue create --title "Task" --notes "Additional context" --type task`, **Then** the created issue has the notes field populated
+5. **Given** a user creates an issue with all 4 new fields combined, **When** they run `sl issue create --title "Task" --acceptance-criteria "AC" --dod "DoD1" --design "Design" --notes "Notes" --type task`, **Then** all 4 fields are persisted correctly
+6. **Given** a user creates an issue with all new fields, **When** they run `sl issue show` on the created issue, **Then** acceptance_criteria, definition_of_done, design, and notes are displayed in dedicated sections
 
 ---
 
@@ -149,9 +151,9 @@ As a developer running `/specledger.implement`, I want the command to utilize al
 
 ### Measurable Outcomes
 
-- **SC-001**: Users can create issues with all 3 structured fields (`--acceptance-criteria`, `--dod`, `--design`) in a single command
+- **SC-001**: Users can create issues with all 4 fields (`--acceptance-criteria`, `--dod`, `--design`, `--notes`) in a single command
 - **SC-002**: Generated task issues have verifiable blocking relationships using `sl issue show --tree` or `sl issue ready`
-- **SC-003**: `sl issue show` displays all 3 structured fields in organized, readable format with dedicated sections
+- **SC-003**: `sl issue show` displays all 4 fields in organized, readable format with dedicated sections
 - **SC-004**: Task generation creates no more false-positive blocking relationships between independent tasks
 - **SC-005**: Task generation populates design field with technical approach from plan.md
 - **SC-006**: Implementation workflow reads design field for technical guidance
