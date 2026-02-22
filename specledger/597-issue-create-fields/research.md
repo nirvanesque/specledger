@@ -78,6 +78,65 @@ issueCreateCmd.Flags().StringArrayVar(&issueDoDFlag, "dod", []string{}, "Definit
 | Case-insensitive DoD matching | Could match wrong item; unpredictable |
 | Auto-add DoD item on --check-dod | Hides typos; violates explicit is better than implicit |
 
+## External System Analysis: Beads
+
+**Source**: https://github.com/steveyegge/beads
+
+### Overview
+
+Beads is an AI-assisted issue tracking system designed for small teams. It uses a single `beads.jsonl` file for storage and integrates with AI agents via Model Context Protocol (MCP).
+
+### Supported Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Unique identifier (format: `B-xxxxxx`) |
+| `title` | string | Issue title |
+| `type` | string | Issue type: `task`, `epic`, `bug`, `feature`, `story` |
+| `status` | string | Status: `open`, `in_progress`, `closed` |
+| `priority` | int | Priority level (0=highest) |
+| `created` | timestamp | Creation time |
+| `modified` | timestamp | Last modification time |
+| `external_ref` | string | External reference (e.g., Jira ticket) |
+| `reason` | string | Why this issue exists |
+| `assignee` | string | Assigned user |
+| `parent` | string | Parent issue ID |
+| `children` | []string | Child issue IDs |
+| `blocks` | []string | Issues this blocks |
+| `blocked_by` | []string | Issues blocking this |
+| `related` | []string | Related issues |
+| `discovered_from` | string | Source issue that discovered this |
+
+### Dependency Types
+
+- **blocks/blocked_by**: Direct blocking relationships
+- **parent/children**: Hierarchical task breakdown
+- **related**: Loose associations
+- **discovered_from**: Traces issue discovery lineage
+
+### Fields NOT Supported (Gap Analysis)
+
+| Field | SpecLedger Has | Beads Has | Impact |
+|-------|----------------|-----------|--------|
+| `acceptance_criteria` | ✓ | ✗ | Beads users cannot specify acceptance criteria |
+| `definition_of_done` | ✓ | ✗ | Beads lacks checklist-style DoD tracking |
+| `design` | ✓ | ✗ | Beads has no design notes field |
+| `notes` | ✓ | ✗ | Beads has no implementation notes field |
+| `labels` | ✓ | ✗ | Beads lacks tagging/labeling system |
+| `spec` | ✓ | ✗ | Beads has no spec context linking |
+
+### Implications for This Feature
+
+1. **Competitive Advantage**: Adding `--acceptance-criteria`, `--dod`, `--design`, `--notes` flags gives SpecLedger richer issue metadata than Beads.
+
+2. **No Migration Concerns**: Since Beads doesn't support these fields, there's no need to consider Beads compatibility in our implementation.
+
+3. **Prompt Template Value**: Utilizing these fields in AI prompts provides structured context that Beads users would have to manually embed in descriptions.
+
+### Conclusion
+
+This feature differentiates SpecLedger from Beads by providing structured fields for acceptance criteria, definition of done, design notes, and implementation notes. The blocking relationship improvements also address a gap where both systems could improve—SpecLedger's `sl issue link` command already supports dependencies, but this feature ensures prompts properly instruct agents on creating and maintaining blocking trees.
+
 ## No NEEDS CLARIFICATION Items
 
 All technical decisions resolved through code analysis and spec clarifications.
