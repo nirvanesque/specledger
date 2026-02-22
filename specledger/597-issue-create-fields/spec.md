@@ -47,7 +47,11 @@ As a developer, I want to update the definition of done on existing issues so th
 2. **Given** an existing issue with DoD items, **When** user runs `sl issue update SL-xxxxx --dod "Replacement item"`, **Then** the previous DoD items are replaced with the new item
 3. **Given** an existing issue, **When** user runs `sl issue update SL-xxxxx --check-dod "Item text"`, **Then** that specific DoD item is marked as checked with a verified_at timestamp
 4. **Given** an existing issue with checked DoD item, **When** user runs `sl issue update SL-xxxxx --uncheck-dod "Item text"`, **Then** that DoD item is unchecked and verified_at is cleared
-5. **Given** an existing issue, **When** user runs `sl issue update SL-xxxxx --check-dod "Nonexistent item"`, **Then** the command returns an error "DoD item not found: 'Nonexistent item'" - Tasks Generated with Proper Blocking Relations (Priority: P2)
+5. **Given** an existing issue, **When** user runs `sl issue update SL-xxxxx --check-dod "Nonexistent item"`, **Then** the command returns an error "DoD item not found: 'Nonexistent item'"
+
+---
+
+### User Story 3 - Tasks Generated with Proper Blocking Relations (Priority: P2)
 
 As a developer running `/specledger.tasks`, I want generated task issues to have correct blocking relationships so that the dependency tree accurately reflects implementation order and parallel work opportunities.
 
@@ -82,6 +86,23 @@ As a developer running `/specledger.tasks`, I want the command to utilize the ne
 
 ---
 
+### User Story 5 - Implement Prompt Utilizes DoD Check (Priority: P3)
+
+As a developer running `/specledger.implement`, I want the command to check off Definition of Done items as implementation progresses so that the issue's DoD reflects actual completion status.
+
+**Why this priority**: This enhances the implementation workflow by automatically tracking progress through DoD items. Depends on US1 and US2 being implemented first.
+
+**Independent Test**: Can be tested by running `/specledger.implement` and verifying that as each task phase completes, corresponding DoD items are marked as checked using `sl issue update --check-dod`.
+
+**Acceptance Scenarios**:
+
+1. **Given** the updated implement prompt, **When** a task is completed, **Then** the agent uses `sl issue update SL-xxxxx --check-dod "Item text"` to mark relevant DoD items as checked
+2. **Given** an issue with multiple DoD items, **When** implementation progresses, **Then** each completed subtask results in the corresponding DoD item being checked
+3. **Given** the implement prompt completes a task, **When** all DoD items are checked, **Then** the issue status can be changed to closed via `sl issue close`
+4. **Given** the implement prompt, **When** reviewing progress, **Then** `sl issue show` displays which DoD items are checked with verified_at timestamps
+
+---
+
 ### Edge Cases
 
 - What happens when `--dod` is provided without `--title`? The existing validation should catch missing required title.
@@ -107,9 +128,10 @@ As a developer running `/specledger.tasks`, I want the command to utilize the ne
 - **FR-009**: System MUST return a clear error when --check-dod or --uncheck-dod is called with text that doesn't match any existing DoD item
 - **FR-010**: System MUST display acceptance_criteria, definition_of_done, and design in `sl issue show` output in dedicated sections
 - **FR-011**: The specledger.tasks prompt MUST be updated to instruct using new CLI flags instead of embedding in description
-- **FR-012**: Task generation MUST create proper blocking relationships: setup blocks implementation, models block services, services block endpoints
-- **FR-013**: Task generation MUST NOT create false blocking relationships between parallelizable tasks (different files, no dependencies)
-- **FR-014**: Feature-type issues for phases MUST have appropriate blocking: foundational phases block user story phases, but phases at the same level should not block each other unless specified
+- **FR-012**: The specledger.implement prompt MUST be updated to use `sl issue update --check-dod` when completing subtasks that correspond to DoD items
+- **FR-013**: Task generation MUST create proper blocking relationships: setup blocks implementation, models block services, services block endpoints
+- **FR-014**: Task generation MUST NOT create false blocking relationships between parallelizable tasks (different files, no dependencies)
+- **FR-015**: Feature-type issues for phases MUST have appropriate blocking: foundational phases block user story phases, but phases at the same level should not block each other unless specified
 
 ### Key Entities
 
@@ -124,7 +146,8 @@ As a developer running `/specledger.tasks`, I want the command to utilize the ne
 - **SC-002**: Generated task issues have verifiable blocking relationships using `sl issue show --tree` or `sl issue ready`
 - **SC-003**: `sl issue show` displays all fields in organized, readable format with dedicated sections
 - **SC-004**: Task generation creates no more false-positive blocking relationships between independent tasks
-- **SC-005**: All existing functionality remains unchanged (backward compatibility)
+- **SC-005**: Implementation workflow automatically checks off DoD items as subtasks complete
+- **SC-006**: All existing functionality remains unchanged (backward compatibility)
 
 ### Previous work
 
