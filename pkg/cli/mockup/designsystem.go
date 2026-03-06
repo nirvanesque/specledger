@@ -63,8 +63,8 @@ func WriteDesignSystem(path string, ds *DesignSystem) error {
 
 	// Summary table
 	sb.WriteString("## Overview\n\n")
-	sb.WriteString(fmt.Sprintf("| Field | Value |\n"))
-	sb.WriteString(fmt.Sprintf("| ----- | ----- |\n"))
+	sb.WriteString("| Field | Value |\n")
+	sb.WriteString("| ----- | ----- |\n")
 	sb.WriteString(fmt.Sprintf("| Framework | %s |\n", ds.Framework.String()))
 
 	if ds.Style != nil {

@@ -8,11 +8,11 @@ import (
 
 // frameworkLayoutConfig defines where to look for layout files per framework.
 type frameworkLayoutConfig struct {
-	router      string
-	dirs        []string
-	filenames   []string // exact filenames to match (e.g., "layout.tsx")
-	filter      string   // substring filter for extension-based scan
-	exts        []string
+	router    string
+	dirs      []string
+	filenames []string // exact filenames to match (e.g., "layout.tsx")
+	filter    string   // substring filter for extension-based scan
+	exts      []string
 }
 
 var frameworkLayoutConfigs = map[FrameworkType]frameworkLayoutConfig{

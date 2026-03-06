@@ -134,8 +134,8 @@ func runMockup(cmd *cobra.Command, args []string) error {
 
 	// Step 3: Design system check/generate (extracts global CSS/design tokens only)
 	dsPath := filepath.Join(cwd, ".specledger", "memory", "design-system.md")
-	var ds *mockup.DesignSystem
 	dsCreated := false
+	skipGenerate := false
 
 	if _, err := os.Stat(dsPath); os.IsNotExist(err) {
 		fmt.Println("Design system not found.")
@@ -152,16 +152,13 @@ func runMockup(cmd *cobra.Command, args []string) error {
 			}
 			if !generate {
 				fmt.Println("Skipping design system generation.")
-				ds = &mockup.DesignSystem{
-					Version:   1,
-					Framework: framework,
-				}
+				skipGenerate = true
 			}
 		}
-		if ds == nil {
+		if !skipGenerate {
 			// Extract global CSS/design tokens and app structure
 			styleInfo := mockup.ScanStyles(cwd)
-			ds = &mockup.DesignSystem{
+			ds := &mockup.DesignSystem{
 				Version:      1,
 				Framework:    framework,
 				Style:        styleInfo,
@@ -175,11 +172,11 @@ func runMockup(cmd *cobra.Command, args []string) error {
 			dsCreated = true
 		}
 	} else {
-		loadedDS, err := mockup.LoadDesignSystem(dsPath)
-		if err != nil {
+		_, loadErr := mockup.LoadDesignSystem(dsPath)
+		if loadErr != nil {
 			fmt.Printf("%s Design system is malformed, regenerating...\n", ui.WarningIcon())
 			styleInfo := mockup.ScanStyles(cwd)
-			ds = &mockup.DesignSystem{
+			ds := &mockup.DesignSystem{
 				Version:      1,
 				Framework:    framework,
 				Style:        styleInfo,
@@ -190,7 +187,6 @@ func runMockup(cmd *cobra.Command, args []string) error {
 			}
 			dsCreated = true
 		} else {
-			ds = loadedDS
 			fmt.Printf("%s Loaded design system\n", ui.Checkmark())
 		}
 	}

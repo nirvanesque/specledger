@@ -94,10 +94,10 @@ export default {
 	scanTailwindConfig(dir, info)
 
 	cases := map[string]string{
-		"brand-50":   "#eef2ff",
-		"brand-500":  "#6366f1",
-		"brand-900":  "#312e81",
-		"surface-0":  "#ffffff",
+		"brand-50":    "#eef2ff",
+		"brand-500":   "#6366f1",
+		"brand-900":   "#312e81",
+		"surface-0":   "#ffffff",
 		"surface-100": "#f3f4f6",
 	}
 	for token, want := range cases {
@@ -233,4 +233,3 @@ func TestScanStyles_ShadcnByComponentsJSON(t *testing.T) {
 		t.Errorf("expected shadcn/ui in ComponentLibs, got %v", info.ComponentLibs)
 	}
 }
-

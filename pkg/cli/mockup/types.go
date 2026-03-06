@@ -68,12 +68,12 @@ type DetectionResult struct {
 // DesignSystem contains the project's design tokens and styling conventions.
 // Does NOT index components - the AI agent discovers those via codebase search.
 type DesignSystem struct {
-	Version      int            `yaml:"version" json:"version"`
-	Framework    FrameworkType  `yaml:"framework" json:"framework"`
-	LastScanned  time.Time      `yaml:"last_scanned" json:"last_scanned"`
-	ExternalLibs []string       `yaml:"external_libs,omitempty" json:"external_libs,omitempty"`
-	Style        *StyleInfo     `yaml:"style,omitempty" json:"style,omitempty"`
-	AppStructure *AppStructure  `yaml:"app_structure,omitempty" json:"app_structure,omitempty"`
+	Version      int           `yaml:"version" json:"version"`
+	Framework    FrameworkType `yaml:"framework" json:"framework"`
+	LastScanned  time.Time     `yaml:"last_scanned" json:"last_scanned"`
+	ExternalLibs []string      `yaml:"external_libs,omitempty" json:"external_libs,omitempty"`
+	Style        *StyleInfo    `yaml:"style,omitempty" json:"style,omitempty"`
+	AppStructure *AppStructure `yaml:"app_structure,omitempty" json:"app_structure,omitempty"`
 }
 
 // AppStructure describes the project's layout and routing structure.
