@@ -159,12 +159,13 @@ func runMockup(cmd *cobra.Command, args []string) error {
 			}
 		}
 		if ds == nil {
-			// Extract global CSS/design tokens
+			// Extract global CSS/design tokens and app structure
 			styleInfo := mockup.ScanStyles(cwd)
 			ds = &mockup.DesignSystem{
-				Version:   1,
-				Framework: framework,
-				Style:     styleInfo,
+				Version:      1,
+				Framework:    framework,
+				Style:        styleInfo,
+				AppStructure: mockup.ScanAppStructure(cwd, framework),
 			}
 			if err := mockup.WriteDesignSystem(dsPath, ds); err != nil {
 				return fmt.Errorf("Error: Cannot write to .specledger/memory/\n\nCheck file permissions and try again.")
@@ -179,9 +180,10 @@ func runMockup(cmd *cobra.Command, args []string) error {
 			fmt.Printf("%s Design system is malformed, regenerating...\n", ui.WarningIcon())
 			styleInfo := mockup.ScanStyles(cwd)
 			ds = &mockup.DesignSystem{
-				Version:   1,
-				Framework: framework,
-				Style:     styleInfo,
+				Version:      1,
+				Framework:    framework,
+				Style:        styleInfo,
+				AppStructure: mockup.ScanAppStructure(cwd, framework),
 			}
 			if writeErr := mockup.WriteDesignSystem(dsPath, ds); writeErr != nil {
 				return fmt.Errorf("failed to write design system: %w", writeErr)
@@ -225,15 +227,7 @@ func runMockup(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Use style from design system (already extracted), or scan fresh if missing
-	var styleInfo *mockup.StyleInfo
-	if ds != nil && ds.Style != nil {
-		styleInfo = ds.Style
-	} else {
-		styleInfo = mockup.ScanStyles(cwd)
-	}
-
-	promptCtx := mockup.BuildMockupPromptContext(specName, specFile, specContent.Title, framework, format, outputPath, ds, styleInfo, mockupPrompt)
+	promptCtx := mockup.BuildMockupPromptContext(specName, specFile, specContent.Title, framework, format, outputPath, mockupPrompt)
 	promptText, err := mockup.RenderMockupPrompt(promptCtx)
 	if err != nil {
 		return fmt.Errorf("failed to render prompt: %w", err)
@@ -410,6 +404,7 @@ func runMockupUpdate(cmd *cobra.Command, args []string) error {
 
 	existing.Framework = framework
 	existing.Style = styleInfo
+	existing.AppStructure = mockup.ScanAppStructure(cwd, framework)
 	if err := mockup.WriteDesignSystem(dsPath, existing); err != nil {
 		return fmt.Errorf("Error: Cannot write to .specledger/memory/\n\nCheck file permissions and try again.")
 	}
