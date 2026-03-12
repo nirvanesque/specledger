@@ -4,7 +4,9 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(make build:*)",
-      "mcp__supabase__list_tables"
+      "mcp__supabase__list_tables",
+      "Bash(sl spec:*)",
+      "Bash(sl comment:*)"
     ]
   },
   "enableAllProjectMcpServers": true,
