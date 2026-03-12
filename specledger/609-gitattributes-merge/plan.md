@@ -17,7 +17,7 @@ PRs are cluttered with machine-generated specledger artifacts (`issues.jsonl`, `
 **Project Type**: Single project (Go CLI)
 **Performance Goals**: N/A (file operation, runs once during init)
 **Constraints**: Must be idempotent, must preserve user content in `.gitattributes`
-**Scale/Scope**: ~3 files modified, 2 new files (merge.go + merge_test.go), 1 template updated
+**Scale/Scope**: 5 files modified, 3 new files (merge.go, merge_test.go, gitattributes_test.go)
 
 ## Constitution Check
 
@@ -31,7 +31,7 @@ Constitution is not yet configured for this project (template placeholders only)
 - [x] **UX Consistency**: User flows documented in spec acceptance scenarios (US1-US3)
 - [x] **Performance**: N/A — single file operation during init, no performance concerns
 - [x] **Observability**: Verbose mode already exists in CopyOptions for logging merge operations
-- [ ] **Issue Tracking**: GitHub Issue #74 exists; epic to be created during `/specledger.tasks` generation (scope grew beyond bug-fix to include template merge support)
+- [x] **Issue Tracking**: GitHub Issue #74 exists; Epic SL-7bb372 created with 6 phases and 19 tasks
 
 **Complexity Violations**: None identified
 
@@ -63,6 +63,9 @@ pkg/embedded/templates/
 ├── manifest.yaml        # MODIFY: add mergeable list
 └── specledger/
     └── .gitattributes   # MODIFY: populate with linguist-generated patterns
+
+tests/integration/
+└── gitattributes_test.go # NEW: 8 integration tests (sl init + sl doctor flows)
 ```
 
-**Structure Decision**: This is a Go CLI project. All changes are within the existing `pkg/cli/playbooks/` and `pkg/embedded/templates/` packages. No new packages or structural changes needed.
+**Structure Decision**: This is a Go CLI project. All changes are within the existing `pkg/cli/playbooks/` and `pkg/embedded/templates/` packages, plus integration tests in `tests/integration/`. No new packages or structural changes needed.

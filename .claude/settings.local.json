@@ -6,7 +6,8 @@
       "Bash(make build:*)",
       "mcp__supabase__list_tables",
       "Bash(sl spec:*)",
-      "Bash(sl comment:*)"
+      "Bash(sl comment:*)",
+      "WebSearch"
     ]
   },
   "enableAllProjectMcpServers": true,
