@@ -37,13 +37,19 @@ func CopyPlaybooks(srcDir, destDir string, playbook Playbook, opts CopyOptions) 
 		protectedMap[p] = true
 	}
 
+	// Build mergeable files map from playbook
+	mergeableMap := make(map[string]bool)
+	for _, m := range playbook.Mergeable {
+		mergeableMap[m] = true
+	}
+
 	// 1. Copy structure items (files/directories to project root)
 	for _, structureItem := range playbook.Structure {
 		// path.Join for embedded FS source, filepath.Join for local destination
 		itemSrcPath := path.Join(srcPath, structureItem)
 		itemDestPath := filepath.Join(destDir, structureItem)
 
-		if err := copyStructureItem(itemSrcPath, itemDestPath, structureItem, opts, result, protectedMap); err != nil {
+		if err := copyStructureItem(itemSrcPath, itemDestPath, structureItem, opts, result, protectedMap, mergeableMap); err != nil {
 			result.Errors = append(result.Errors, CopyError{
 				Path:      structureItem,
 				Err:       err,
@@ -87,17 +93,22 @@ func CopyPlaybooks(srcDir, destDir string, playbook Playbook, opts CopyOptions) 
 }
 
 // copyStructureItem copies a structure item (file or directory) from embedded FS to destination.
-func copyStructureItem(srcPath, destPath, structureItem string, opts CopyOptions, result *CopyResult, protectedFiles map[string]bool) error {
+func copyStructureItem(srcPath, destPath, structureItem string, opts CopyOptions, result *CopyResult, protectedFiles, mergeableFiles map[string]bool) error {
 	// Check if source exists in embedded FS
 	if !Exists(srcPath) {
 		return fmt.Errorf("structure item not found: %s", srcPath)
 	}
 
 	// Check if it's a directory or file by trying to read it
-	_, err := ReadFile(srcPath)
+	content, err := ReadFile(srcPath)
 	if err != nil {
 		// It's a directory - walk and copy all files
 		return copyDirectory(srcPath, destPath, structureItem, opts, result, protectedFiles)
+	}
+
+	// Mergeable files use sentinel-based merge (bypasses protected and overwrite logic)
+	if mergeableFiles[structureItem] {
+		return mergeFile(srcPath, destPath, content, opts, result)
 	}
 
 	// It's a file - check if protected
@@ -217,6 +228,38 @@ func copySingleFileFromContent(srcPath, destPath string, content []byte, opts Co
 	result.FilesCopied++
 	if opts.Verbose {
 		fmt.Printf("Copied: %s -> %s\n", srcPath, destPath)
+	}
+
+	return nil
+}
+
+// mergeFile merges embedded template content into an existing file using sentinel markers.
+// If the destination file doesn't exist, it creates it with the sentinel block.
+func mergeFile(srcPath, destPath string, templateContent []byte, opts CopyOptions, result *CopyResult) error {
+	// Read existing file from disk (empty string if not exists)
+	existing := ""
+	if data, err := os.ReadFile(destPath); err == nil {
+		existing = string(data)
+	}
+
+	// Merge using sentinel markers
+	managed := strings.TrimRight(string(templateContent), "\n")
+	merged := MergeSentinelSection(existing, managed)
+
+	// Create parent directories
+	if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+		return fmt.Errorf("failed to create directory: %w", err)
+	}
+
+	if !opts.DryRun {
+		if err := os.WriteFile(destPath, []byte(merged), 0644); err != nil {
+			return fmt.Errorf("failed to write merged file: %w", err)
+		}
+	}
+
+	result.FilesMerged++
+	if opts.Verbose {
+		fmt.Printf("Merged: %s -> %s\n", srcPath, destPath)
 	}
 
 	return nil

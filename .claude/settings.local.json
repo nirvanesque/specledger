@@ -8,7 +8,8 @@
       "Bash(sl spec:*)",
       "Bash(sl comment:*)",
       "WebSearch",
-      "Bash(go test:*)"
+      "Bash(go test:*)",
+      "Bash(go build:*)"
     ]
   },
   "enableAllProjectMcpServers": true,
