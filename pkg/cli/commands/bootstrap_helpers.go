@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/specledger/specledger/internal/agent"
 	"github.com/specledger/specledger/pkg/cli/auth"
 	"github.com/specledger/specledger/pkg/cli/config"
 	"github.com/specledger/specledger/pkg/cli/launcher"
@@ -55,12 +56,22 @@ func detectArtifactPath(projectPath string) string {
 // applyEmbeddedPlaybooks copies embedded playbooks to the project directory.
 // If playbookName is empty, uses the default playbook.
 // If force is true, existing files will be overwritten.
+// If agentTargetDir is set, commands and skills are copied there instead of .claude/
 // Returns the playbook name, version, and structure for metadata storage.
-func applyEmbeddedPlaybooks(projectPath string, playbookName string, force bool) (string, string, []string, error) {
+func applyEmbeddedPlaybooks(projectPath string, playbookName string, force bool, agentTargetDir string) (string, string, []string, error) {
 	ui.PrintSection("Copying Playbooks")
 	fmt.Printf("Applying SpecLedger playbooks...\n")
 
-	pbName, pbVersion, pbStructure, err := playbooks.ApplyToProject(projectPath, playbookName, force)
+	var pbName, pbVersion string
+	var pbStructure []string
+	var err error
+
+	if agentTargetDir != "" {
+		pbName, pbVersion, pbStructure, err = playbooks.ApplyToProjectWithAgentTarget(projectPath, playbookName, force, agentTargetDir)
+	} else {
+		pbName, pbVersion, pbStructure, err = playbooks.ApplyToProject(projectPath, playbookName, force)
+	}
+
 	if err != nil {
 		// Playbooks are helpful but not critical - log warning and continue
 		ui.PrintWarning(fmt.Sprintf("Playbook copying failed: %v", err))
@@ -90,14 +101,47 @@ func trustMiseConfig(projectPath string) {
 
 // setupSpecLedgerProject applies playbooks and creates metadata.
 // Optionally initializes git based on flags.
-// If force is true, existing files will be overwritten.
+// If force is true, existing files will be overwritten and agent symlinks will be fixed.
+// selectedAgents is a comma-separated list of agent names to configure (e.g., "claude,opencode").
 // Returns the playbook name, version, and structure for metadata storage.
-func setupSpecLedgerProject(projectPath, projectName, shortCode, playbookName string, initGit bool, force bool) (string, string, []string, error) {
-	// Apply embedded playbooks
-	selectedPlaybookName, playbookVersion, playbookStructure, err := applyEmbeddedPlaybooks(projectPath, playbookName, force)
+func setupSpecLedgerProject(projectPath, projectName, shortCode, playbookName string, initGit bool, force bool, selectedAgents string) (string, string, []string, error) {
+	// Determine agent target directory - use .agents if multiple agents selected
+	agentTargetDir := ""
+	if selectedAgents != "" && selectedAgents != "None" {
+		agentTargetDir = ".agents"
+	}
+
+	// Apply embedded playbooks (commands/skills go to agentTargetDir if set)
+	// When force=true, templates in .agents/ will be overwritten
+	selectedPlaybookName, playbookVersion, playbookStructure, err := applyEmbeddedPlaybooks(projectPath, playbookName, force, agentTargetDir)
 	if err != nil {
 		// Playbook application failure is not fatal - log warning and continue
 		fmt.Printf("Warning: playbook application had issues: %v\n", err)
+	}
+
+	// Setup multi-agent shared directories if agents selected
+	if selectedAgents != "" && selectedAgents != "None" {
+		agentNames := strings.Split(selectedAgents, ",")
+		for i, name := range agentNames {
+			agentNames[i] = strings.TrimSpace(name)
+		}
+
+		// Create .agents/commands and .agents/skills directories (if not already created by playbook)
+		if err := playbooks.CreateAgentSharedDir(projectPath, force); err != nil {
+			if !strings.Contains(err.Error(), "already exists") {
+				ui.PrintWarning(fmt.Sprintf("Failed to create .agents directory: %v", err))
+			}
+		} else {
+			fmt.Printf("%s Created .agents/ directory\n", ui.Checkmark())
+		}
+
+		// Link each selected agent to the shared directories
+		// This will fix broken/incorrect symlinks without deleting .agents/ content
+		if err := playbooks.LinkAgentToShared(projectPath, agentNames, force); err != nil {
+			ui.PrintWarning(fmt.Sprintf("Failed to link agents: %v", err))
+		} else {
+			fmt.Printf("%s Linked agents: %s\n", ui.Checkmark(), strings.Join(agentNames, ", "))
+		}
 	}
 
 	// Create YAML metadata with playbook info
@@ -157,7 +201,7 @@ func IsConstitutionPopulated(path string) bool {
 
 // WriteDefaultConstitution writes a populated constitution file with the given principles
 // and agent preference, replacing template placeholders.
-func WriteDefaultConstitution(path string, principles []ConstitutionPrinciple, agentPref string) error {
+func WriteDefaultConstitution(path string, principles []ConstitutionPrinciple, agentPref string, selectedAgents []string) error {
 	// Ensure parent directory exists
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return fmt.Errorf("failed to create constitution directory: %w", err)
@@ -180,6 +224,14 @@ func WriteDefaultConstitution(path string, principles []ConstitutionPrinciple, a
 
 	sb.WriteString("## Agent Preferences\n\n")
 	sb.WriteString(fmt.Sprintf("- **Preferred Agent**: %s\n\n", agentPref))
+
+	if len(selectedAgents) > 0 {
+		sb.WriteString("## Selected Agents\n\n")
+		for _, ag := range selectedAgents {
+			sb.WriteString(fmt.Sprintf("- %s\n", ag))
+		}
+		sb.WriteString("\n")
+	}
 
 	sb.WriteString("## Governance\n\n")
 	sb.WriteString("Constitution supersedes all other practices. Amendments require documentation and team approval.\n\n")
@@ -204,11 +256,9 @@ func ReadAgentPreference(path string) (string, error) {
 
 	for _, line := range strings.Split(string(content), "\n") {
 		if strings.Contains(line, "**Preferred Agent**:") {
-			// Extract value after the label
 			parts := strings.SplitN(line, "**Preferred Agent**:", 2)
 			if len(parts) == 2 {
 				pref := strings.TrimSpace(parts[1])
-				// Strip any placeholder tokens
 				if placeholderPattern.MatchString(pref) {
 					return "", nil
 				}
@@ -217,6 +267,37 @@ func ReadAgentPreference(path string) (string, error) {
 		}
 	}
 	return "", nil
+}
+
+// ReadSelectedAgents extracts the selected agents from a populated constitution file.
+// Returns empty slice and nil error if the file exists but has no selected agents.
+func ReadSelectedAgents(path string) ([]string, error) {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	var agents []string
+	inSelectedAgentsSection := false
+
+	for _, line := range strings.Split(string(content), "\n") {
+		if strings.Contains(line, "## Selected Agents") {
+			inSelectedAgentsSection = true
+			continue
+		}
+		if inSelectedAgentsSection {
+			if strings.HasPrefix(line, "## ") {
+				break
+			}
+			if strings.HasPrefix(line, "- ") {
+				agent := strings.TrimSpace(strings.TrimPrefix(line, "- "))
+				if agent != "" && !placeholderPattern.MatchString(agent) {
+					agents = append(agents, agent)
+				}
+			}
+		}
+	}
+	return agents, nil
 }
 
 // romanNumeral converts 1-10 to Roman numerals for principle numbering.
@@ -239,53 +320,84 @@ func launchAgent(projectDir string, agentPref string) error {
 		return nil
 	}
 
-	var agent launcher.AgentOption
-	for _, a := range launcher.DefaultAgents {
-		if a.Name == agentPref {
-			agent = a
-			break
-		}
-	}
-	if agent.Command == "" {
-		ui.PrintWarning(fmt.Sprintf("Unknown agent '%s'. Skipping agent launch.", agentPref))
+	// Parse comma-separated agent preference (TUI may return "Claude Code,OpenCode")
+	// Use the first agent in the list as the primary agent to launch
+	primaryAgent := strings.TrimSpace(strings.Split(agentPref, ",")[0])
+
+	// Look up agent using the registry (supports both display name and command)
+	ag, found := agent.Lookup(primaryAgent)
+	if !found {
+		ui.PrintWarning(fmt.Sprintf("Unknown agent '%s'. Skipping agent launch.", primaryAgent))
 		return nil
 	}
 
-	al := launcher.NewAgentLauncher(agent, projectDir)
+	// Create launcher using agent definition
+	l := launcher.NewLauncherForAgent(ag, projectDir)
 
-	if !al.IsAvailable() {
+	// Check if agent is installed
+	wrappedAgent := launcher.NewAgentFromDefinition(ag)
+	if err := wrappedAgent.CheckInstalled(); err != nil {
 		fmt.Println()
-		ui.PrintWarning(fmt.Sprintf("%s is not installed.", agent.Name))
-		fmt.Printf("  %s\n", al.InstallInstructions())
+		ui.PrintWarning(fmt.Sprintf("%s is not installed.", ag.Name))
+		fmt.Printf("  Install: %s\n", ag.InstallCommand)
 		fmt.Println(ui.Dim("  Project setup is complete. You can launch the agent manually after installing."))
 		return nil
 	}
 
-	cfg, err := config.Load()
-	if err == nil && cfg.Agent != nil {
-		resolved := config.MergeConfigs(
-			config.DefaultAgentConfig(),
-			cfg.Agent,
-			nil,
-			nil,
-			nil,
-		)
-		envVars := resolved.GetEnvVars()
-		if len(envVars) > 0 {
-			al.SetEnv(envVars)
+	// Get agent settings from config (using same logic as 'sl code')
+	settings := config.ResolveAgentSettings(ag.Command)
+	if settings != nil {
+		envVars := make(map[string]string)
+
+		// Set arguments
+		if len(settings.Arguments) > 0 {
+			l.SetFlags(settings.Arguments)
 		}
-		cliFlags := resolved.GetCLIFlags()
-		if len(cliFlags) > 0 {
-			al.SetFlags(cliFlags)
+
+		// Map API key to agent's env var
+		if settings.APIKey != "" && ag.APIKeyEnvVar != "" {
+			envVars[ag.APIKeyEnvVar] = settings.APIKey
+		}
+
+		// Map base URL to agent's env var
+		if settings.BaseURL != "" && ag.BaseURLEnvVar != "" {
+			envVars[ag.BaseURLEnvVar] = settings.BaseURL
+		}
+
+		// Map model to agent's env var
+		if settings.Model != "" && ag.ModelEnvVar != "" {
+			envVars[ag.ModelEnvVar] = settings.Model
+		}
+
+		// Add per-agent env vars
+		for k, v := range settings.EnvVars {
+			envVars[k] = v
+		}
+
+		// Claude-specific: map model aliases to env vars
+		if ag.Command == "claude" {
+			if v, ok := settings.ModelAliases["sonnet"]; ok && v != "" {
+				envVars["ANTHROPIC_DEFAULT_SONNET_MODEL"] = v
+			}
+			if v, ok := settings.ModelAliases["opus"]; ok && v != "" {
+				envVars["ANTHROPIC_DEFAULT_OPUS_MODEL"] = v
+			}
+			if v, ok := settings.ModelAliases["haiku"]; ok && v != "" {
+				envVars["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = v
+			}
+		}
+
+		if len(envVars) > 0 {
+			l.SetEnv(envVars)
 		}
 	}
 
 	fmt.Println()
-	ui.PrintSection("Launching " + agent.Name)
+	ui.PrintSection("Launching " + ag.Name)
 	fmt.Println(ui.Dim("  Type /specledger.onboard to start the guided workflow."))
 	fmt.Println()
 
-	if err := al.Launch(); err != nil {
+	if err := l.Launch(); err != nil {
 		ui.PrintWarning(fmt.Sprintf("Agent exited: %v", err))
 	}
 

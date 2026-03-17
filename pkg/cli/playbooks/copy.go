@@ -8,13 +8,15 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/specledger/specledger/internal/agent"
 )
 
 // CopyPlaybooks copies a playbook to the destination directory from the embedded filesystem.
 // It copies files based on:
 // 1. Structure items (files/directories copied to project root)
-// 2. Commands (copied to .claude/commands/)
-// 3. Skills (copied to .claude/skills/)
+// 2. Commands (copied to .agents/commands/ or .claude/commands/ depending on AgentTargetDir)
+// 3. Skills (copied to .agents/skills/ or .claude/skills/ depending on AgentTargetDir)
 func CopyPlaybooks(srcDir, destDir string, playbook Playbook, opts CopyOptions) (*CopyResult, error) {
 	startTime := time.Now()
 	result := &CopyResult{}
@@ -43,6 +45,12 @@ func CopyPlaybooks(srcDir, destDir string, playbook Playbook, opts CopyOptions) 
 		mergeableMap[m] = true
 	}
 
+	// Determine target directory for commands and skills
+	agentTargetDir := opts.AgentTargetDir
+	if agentTargetDir == "" {
+		agentTargetDir = ".claude"
+	}
+
 	// 1. Copy structure items (files/directories to project root)
 	for _, structureItem := range playbook.Structure {
 		// path.Join for embedded FS source, filepath.Join for local destination
@@ -58,11 +66,11 @@ func CopyPlaybooks(srcDir, destDir string, playbook Playbook, opts CopyOptions) 
 		}
 	}
 
-	// 2. Copy commands to .claude/commands/
+	// 2. Copy commands to {agentTargetDir}/commands/
 	for _, cmd := range playbook.Commands {
 		// path.Join for embedded FS source, filepath.Join for local destination
 		srcFilePath := path.Join(srcPath, cmd.Path)
-		destFilePath := filepath.Join(destDir, ".claude", "commands", filepath.Base(cmd.Path))
+		destFilePath := filepath.Join(destDir, agentTargetDir, "commands", filepath.Base(cmd.Path))
 
 		if err := copySingleFile(srcFilePath, destFilePath, opts, result, protectedMap); err != nil {
 			result.Errors = append(result.Errors, CopyError{
@@ -73,11 +81,11 @@ func CopyPlaybooks(srcDir, destDir string, playbook Playbook, opts CopyOptions) 
 		}
 	}
 
-	// 3. Copy skills to .claude/skills/
+	// 3. Copy skills to {agentTargetDir}/skills/
 	for _, skill := range playbook.Skills {
 		// path.Join for embedded FS source, filepath.Join for local destination
 		srcFilePath := path.Join(srcPath, skill.Path)
-		destFilePath := filepath.Join(destDir, ".claude", skill.Path)
+		destFilePath := filepath.Join(destDir, agentTargetDir, skill.Path)
 
 		if err := copySingleFile(srcFilePath, destFilePath, opts, result, protectedMap); err != nil {
 			result.Errors = append(result.Errors, CopyError{
@@ -268,15 +276,254 @@ func mergeFile(srcPath, destPath string, templateContent []byte, opts CopyOption
 // IsExecutableFile determines if a file should have execute permissions.
 // Returns true if the file has a .sh extension or starts with a shebang (#!).
 func IsExecutableFile(filename string, content []byte) bool {
-	// Check for .sh extension
 	if strings.HasSuffix(filename, ".sh") {
 		return true
 	}
 
-	// Check for shebang in first line
 	if len(content) > 2 && content[0] == '#' && content[1] == '!' {
 		return true
 	}
 
 	return false
+}
+
+func CreateAgentSharedDir(projectDir string, force bool) error {
+	agentDir := filepath.Join(projectDir, ".agents")
+
+	// Check if .agents/ already exists
+	if _, err := os.Stat(agentDir); err == nil {
+		if !force {
+			return fmt.Errorf(".agents/ directory already exists. Use --force to proceed")
+		}
+		// With --force, we just proceed without deleting existing content
+		// This preserves any custom commands/skills the user has added
+	}
+
+	// Ensure commands and skills directories exist (MkdirAll is idempotent)
+	commandsDir := filepath.Join(agentDir, "commands")
+	if err := os.MkdirAll(commandsDir, 0755); err != nil {
+		return fmt.Errorf("failed to create .agents/commands: %w", err)
+	}
+
+	skillsDir := filepath.Join(agentDir, "skills")
+	if err := os.MkdirAll(skillsDir, 0755); err != nil {
+		return fmt.Errorf("failed to create .agents/skills: %w", err)
+	}
+
+	// Migrate from .claude/commands if it exists (only copy files that don't already exist)
+	claudeCommandsDir := filepath.Join(projectDir, ".claude", "commands")
+	if _, err := os.Stat(claudeCommandsDir); err == nil {
+		entries, err := os.ReadDir(claudeCommandsDir)
+		if err != nil {
+			return fmt.Errorf("failed to read .claude/commands: %w", err)
+		}
+		for _, entry := range entries {
+			src := filepath.Join(claudeCommandsDir, entry.Name())
+			dst := filepath.Join(commandsDir, entry.Name())
+			// Only copy if destination doesn't exist (preserve existing customizations)
+			if _, err := os.Stat(dst); os.IsNotExist(err) {
+				if err := copyFileOrDir(src, dst); err != nil {
+					return fmt.Errorf("failed to migrate %s: %w", entry.Name(), err)
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func LinkAgentToShared(projectDir string, agentNames []string, force bool) error {
+	// Ensure .agents directories exist
+	sharedCommandsDir := filepath.Join(projectDir, ".agents", "commands")
+	sharedSkillsDir := filepath.Join(projectDir, ".agents", "skills")
+	if err := os.MkdirAll(sharedCommandsDir, 0755); err != nil {
+		return fmt.Errorf("failed to create .agents/commands: %w", err)
+	}
+	if err := os.MkdirAll(sharedSkillsDir, 0755); err != nil {
+		return fmt.Errorf("failed to create .agents/skills: %w", err)
+	}
+
+	// Build set of selected agents for quick lookup
+	selectedSet := make(map[string]bool)
+	for _, name := range agentNames {
+		selectedSet[strings.ToLower(strings.TrimSpace(name))] = true
+	}
+
+	// Link ALL agents that have existing config directories or are selected
+	// This ensures we don't leave orphaned directories with wrong symlinks
+	for _, ag := range agent.All() {
+		// Skip agents without a config dir or with special dirs (like .github)
+		if ag.ConfigDir == "" || ag.ConfigDir == ".github" {
+			continue
+		}
+
+		agentDir := filepath.Join(projectDir, ag.ConfigDir)
+		commandsLink := filepath.Join(agentDir, "commands")
+		skillsLink := filepath.Join(agentDir, "skills")
+
+		// Check if this agent should be linked:
+		// 1. It's in the selected list, OR
+		// 2. It has an existing config directory (commands or skills)
+		isSelected := selectedSet[strings.ToLower(ag.Name)] || selectedSet[strings.ToLower(ag.Command)]
+		hasCommandsDir := dirExists(commandsLink)
+		hasSkillsDir := dirExists(skillsLink)
+
+		if !isSelected && !hasCommandsDir && !hasSkillsDir {
+			continue // Skip agents that aren't selected and don't have existing dirs
+		}
+
+		if err := os.MkdirAll(agentDir, 0755); err != nil {
+			return fmt.Errorf("failed to create %s: %w", agentDir, err)
+		}
+
+		// Handle commands directory
+		if err := migrateAndLink(commandsLink, sharedCommandsDir, force); err != nil {
+			return fmt.Errorf("failed to link %s/commands: %w", ag.Name, err)
+		}
+
+		// Handle skills directory
+		if err := migrateAndLink(skillsLink, sharedSkillsDir, force); err != nil {
+			return fmt.Errorf("failed to link %s/skills: %w", ag.Name, err)
+		}
+	}
+
+	return nil
+}
+
+// dirExists checks if a path exists and is a directory (or symlink to directory)
+func dirExists(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return info.IsDir()
+}
+
+// migrateAndLink handles migrating contents from an existing directory to shared,
+// then creates a symlink to the shared directory.
+func migrateAndLink(linkPath, sharedDir string, force bool) error {
+	// Compute relative path from linkPath's parent to sharedDir for portable symlinks
+	linkParent := filepath.Dir(linkPath)
+	relSharedDir, err := filepath.Rel(linkParent, sharedDir)
+	if err != nil {
+		// Fall back to absolute path if relative computation fails
+		relSharedDir = sharedDir
+	}
+
+	// Check if linkPath already exists
+	info, err := os.Lstat(linkPath)
+	if err == nil {
+		// Already exists
+		if info.Mode()&os.ModeSymlink != 0 {
+			// It's already a symlink, check if it points to the right place
+			target, _ := os.Readlink(linkPath)
+			// Compare against relative path since that's what we use
+			if target == relSharedDir {
+				return nil // Already correctly linked
+			}
+		}
+
+		if !force {
+			return nil // Skip if not forcing
+		}
+
+		// If it's a directory (not a symlink), migrate contents first
+		if info.IsDir() {
+			// Migrate contents to shared directory
+			entries, err := os.ReadDir(linkPath)
+			if err != nil {
+				return fmt.Errorf("failed to read %s: %w", linkPath, err)
+			}
+			for _, entry := range entries {
+				src := filepath.Join(linkPath, entry.Name())
+				dst := filepath.Join(sharedDir, entry.Name())
+				// Only copy if destination doesn't exist
+				if _, err := os.Stat(dst); os.IsNotExist(err) {
+					if err := copyFileOrDir(src, dst); err != nil {
+						// Log warning but continue
+						fmt.Printf("Warning: failed to migrate %s: %v\n", src, err)
+					}
+				}
+			}
+		}
+
+		// Remove existing file/directory/symlink
+		if err := os.RemoveAll(linkPath); err != nil {
+			return fmt.Errorf("failed to remove %s: %w", linkPath, err)
+		}
+	}
+
+	// Create symlink using relative path for portability
+	return agent.SymlinkOrCopy(relSharedDir, linkPath)
+}
+
+func copyFileOrDir(src, dst string) error {
+	info, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+
+	if info.IsDir() {
+		return copyDirRecursive(src, dst)
+	}
+	return copyFileContents(src, dst)
+}
+
+func copyDirRecursive(src, dst string) error {
+	if err := os.MkdirAll(dst, 0755); err != nil {
+		return err
+	}
+
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		srcPath := filepath.Join(src, entry.Name())
+		dstPath := filepath.Join(dst, entry.Name())
+		if err := copyFileOrDir(srcPath, dstPath); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func copyFileContents(src, dst string) error {
+	content, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(dst, content, 0644)
+}
+
+// CleanupAgentSymlinks removes existing agent symlinks/directories for all known agents.
+// This is called when --force is used to reset the agent configuration.
+func CleanupAgentSymlinks(projectPath string) error {
+	for _, ag := range agent.All() {
+		// Skip agents without a config dir or with special dirs (like .github)
+		if ag.ConfigDir == "" || ag.ConfigDir == ".github" {
+			continue
+		}
+
+		agentDir := filepath.Join(projectPath, ag.ConfigDir)
+		commandsDir := filepath.Join(agentDir, "commands")
+		skillsDir := filepath.Join(agentDir, "skills")
+
+		// Remove commands symlink/directory if it exists
+		if _, err := os.Lstat(commandsDir); err == nil {
+			if err := os.RemoveAll(commandsDir); err != nil {
+				fmt.Printf("Warning: failed to remove %s: %v\n", commandsDir, err)
+			}
+		}
+
+		// Remove skills symlink/directory if it exists
+		if _, err := os.Lstat(skillsDir); err == nil {
+			if err := os.RemoveAll(skillsDir); err != nil {
+				fmt.Printf("Warning: failed to remove %s: %v\n", skillsDir, err)
+			}
+		}
+	}
+
+	return nil
 }

@@ -3,6 +3,8 @@ package config
 import (
 	"fmt"
 	"strings"
+
+	"github.com/specledger/specledger/internal/agent"
 )
 
 type ConfigKeyType string
@@ -42,109 +44,18 @@ func init() {
 
 func registerAgentKeys() {
 	agentKeys := []*ConfigKeyDef{
+		// Universal agent keys
 		{
-			Key:         "agent.base-url",
+			Key:         "agent.default",
 			Type:        KeyTypeString,
-			EnvVar:      "ANTHROPIC_BASE_URL",
-			Description: "Custom API endpoint URL",
-			Category:    "Provider",
-		},
-		{
-			Key:         "agent.auth-token",
-			Type:        KeyTypeString,
-			EnvVar:      "ANTHROPIC_AUTH_TOKEN",
-			Sensitive:   true,
-			Description: "Auth token (sensitive, masked)",
-			Category:    "Provider",
-		},
-		{
-			Key:         "agent.api-key",
-			Type:        KeyTypeString,
-			EnvVar:      "ANTHROPIC_API_KEY",
-			Sensitive:   true,
-			Description: "API key (sensitive, masked)",
-			Category:    "Provider",
-		},
-		{
-			Key:         "agent.model",
-			Type:        KeyTypeString,
-			EnvVar:      "ANTHROPIC_MODEL",
-			Description: "Default model (alias or full name)",
-			Category:    "Models",
-		},
-		{
-			Key:         "agent.model.sonnet",
-			Type:        KeyTypeString,
-			EnvVar:      "ANTHROPIC_DEFAULT_SONNET_MODEL",
-			Description: "Model for sonnet alias",
-			Category:    "Models",
-		},
-		{
-			Key:         "agent.model.opus",
-			Type:        KeyTypeString,
-			EnvVar:      "ANTHROPIC_DEFAULT_OPUS_MODEL",
-			Description: "Model for opus alias",
-			Category:    "Models",
-		},
-		{
-			Key:         "agent.model.haiku",
-			Type:        KeyTypeString,
-			EnvVar:      "ANTHROPIC_DEFAULT_HAIKU_MODEL",
-			Description: "Model for haiku alias",
-			Category:    "Models",
-		},
-		{
-			Key:         "agent.subagent-model",
-			Type:        KeyTypeString,
-			EnvVar:      "CLAUDE_CODE_SUBAGENT_MODEL",
-			Description: "Model for subagents",
-			Category:    "Models",
-		},
-		{
-			Key:         "agent.provider",
-			Type:        KeyTypeEnum,
-			EnvVar:      "",
-			Default:     "anthropic",
-			EnumValues:  []string{"anthropic", "bedrock", "vertex"},
-			Description: "Provider selection",
-			Category:    "Provider",
-		},
-		{
-			Key:         "agent.permission-mode",
-			Type:        KeyTypeEnum,
-			CLIFlag:     "--permission-mode",
-			Default:     "default",
-			EnumValues:  []string{"default", "plan", "bypassPermissions", "acceptEdits", "dontAsk"},
-			Description: "Permission mode for agent",
-			Category:    "Launch Flags",
-		},
-		{
-			Key:         "agent.skip-permissions",
-			Type:        KeyTypeBool,
-			CLIFlag:     "--dangerously-skip-permissions",
-			Default:     false,
-			Description: "Skip permission prompts",
-			Category:    "Launch Flags",
-		},
-		{
-			Key:         "agent.effort",
-			Type:        KeyTypeEnum,
-			CLIFlag:     "--effort",
-			EnumValues:  []string{"low", "medium", "high"},
-			Description: "Effort level",
-			Category:    "Launch Flags",
-		},
-		{
-			Key:         "agent.allowed-tools",
-			Type:        KeyTypeStringList,
-			CLIFlag:     "--allowedTools",
-			Description: "Tools allowed without prompts",
-			Category:    "Launch Flags",
+			Default:     "claude",
+			Description: "Default coding agent to launch (claude, opencode, github-copilot, codex)",
+			Category:    "Agent",
 		},
 		{
 			Key:         "agent.env",
 			Type:        KeyTypeStringMap,
-			Description: "Arbitrary env vars injected into agent",
+			Description: "Arbitrary env vars injected into agent (deprecated, use agent.<name>.env)",
 			Category:    "Environment",
 		},
 		{
@@ -165,9 +76,97 @@ func (r *SchemaRegistry) Lookup(key string) (*ConfigKeyDef, error) {
 		return def, nil
 	}
 
+	// Handle agent.env.<VAR> (legacy)
 	if strings.HasPrefix(key, "agent.env.") {
 		if def, ok := r.keys["agent.env"]; ok {
 			return def, nil
+		}
+	}
+
+	// Handle per-agent keys: agent.<name>.<field>
+	if strings.HasPrefix(key, "agent.") {
+		parts := strings.Split(key, ".")
+		if len(parts) >= 3 {
+			agentName := parts[1]
+			ag, found := agent.Lookup(agentName)
+			if !found {
+				return nil, fmt.Errorf("unknown agent name: %s (valid: claude, opencode, github-copilot, codex)", agentName)
+			}
+
+			// agent.<name>.api_key
+			if len(parts) == 3 && parts[2] == "api_key" {
+				return &ConfigKeyDef{
+					Key:         key,
+					Type:        KeyTypeString,
+					Sensitive:   true,
+					Description: fmt.Sprintf("API key for %s agent", ag.Name),
+					Category:    "Per-Agent",
+				}, nil
+			}
+
+			// agent.<name>.base_url
+			if len(parts) == 3 && parts[2] == "base_url" {
+				return &ConfigKeyDef{
+					Key:         key,
+					Type:        KeyTypeString,
+					Description: fmt.Sprintf("Custom endpoint URL for %s agent", ag.Name),
+					Category:    "Per-Agent",
+				}, nil
+			}
+
+			// agent.<name>.model
+			if len(parts) == 3 && parts[2] == "model" {
+				return &ConfigKeyDef{
+					Key:         key,
+					Type:        KeyTypeString,
+					Description: fmt.Sprintf("Model selection for %s agent", ag.Name),
+					Category:    "Per-Agent",
+				}, nil
+			}
+
+			// agent.<name>.arguments
+			if len(parts) == 3 && parts[2] == "arguments" {
+				return &ConfigKeyDef{
+					Key:         key,
+					Type:        KeyTypeString,
+					Description: fmt.Sprintf("CLI arguments for %s agent", ag.Name),
+					Category:    "Per-Agent",
+				}, nil
+			}
+
+			// agent.<name>.env
+			if len(parts) == 3 && parts[2] == "env" {
+				return &ConfigKeyDef{
+					Key:         key,
+					Type:        KeyTypeStringMap,
+					Description: fmt.Sprintf("Environment variables for %s agent", ag.Name),
+					Category:    "Per-Agent",
+				}, nil
+			}
+
+			// agent.<name>.env.<VAR>
+			if len(parts) == 4 && parts[2] == "env" {
+				return &ConfigKeyDef{
+					Key:         key,
+					Type:        KeyTypeString,
+					Description: fmt.Sprintf("Environment variable %s for %s agent", parts[3], ag.Name),
+					Category:    "Per-Agent",
+				}, nil
+			}
+
+			// Claude-specific: agent.claude.model_aliases.<alias>
+			if agentName == "claude" && len(parts) == 4 && parts[2] == "model_aliases" {
+				alias := parts[3]
+				if alias == "sonnet" || alias == "opus" || alias == "haiku" {
+					return &ConfigKeyDef{
+						Key:         key,
+						Type:        KeyTypeString,
+						Description: fmt.Sprintf("Claude model alias for %s (e.g., claude-%s-4-20250514)", alias, alias),
+						Category:    "Claude-Specific",
+					}, nil
+				}
+				return nil, fmt.Errorf("unknown model alias: %s (valid: sonnet, opus, haiku)", alias)
+			}
 		}
 	}
 
@@ -191,8 +190,51 @@ func (r *SchemaRegistry) ListByCategory() map[string][]*ConfigKeyDef {
 }
 
 func (r *SchemaRegistry) IsValidKey(key string) bool {
-	_, ok := r.keys[key]
-	return ok
+	if _, ok := r.keys[key]; ok {
+		return true
+	}
+
+	if !strings.HasPrefix(key, "agent.") {
+		return false
+	}
+
+	// Legacy: agent.env.<VAR> (must check before agent name lookup)
+	if strings.HasPrefix(key, "agent.env.") && len(strings.Split(key, ".")) == 3 {
+		return true
+	}
+
+	parts := strings.Split(key, ".")
+	if len(parts) < 3 {
+		return false
+	}
+
+	agentName := parts[1]
+	ag, found := agent.Lookup(agentName)
+	if !found {
+		return false
+	}
+
+	// Check for valid field patterns
+	if len(parts) == 3 {
+		field := parts[2]
+		return field == "api_key" || field == "base_url" || field == "model" ||
+			field == "arguments" || field == "env"
+	}
+
+	// agent.<name>.env.<VAR>
+	if len(parts) == 4 && parts[2] == "env" {
+		return true
+	}
+
+	// agent.claude.model_aliases.<alias>
+	if agentName == "claude" && len(parts) == 4 && parts[2] == "model_aliases" {
+		alias := parts[3]
+		return alias == "sonnet" || alias == "opus" || alias == "haiku"
+	}
+
+	_ = ag // avoid unused variable warning
+
+	return false
 }
 
 func (r *SchemaRegistry) FindSimilar(key string) []string {

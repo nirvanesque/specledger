@@ -2,7 +2,11 @@ package templates
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 
+	"github.com/specledger/specledger/internal/agent"
 	"github.com/specledger/specledger/pkg/cli/metadata"
 	"github.com/specledger/specledger/pkg/cli/playbooks"
 )
@@ -70,6 +74,11 @@ func UpdateTemplates(projectDir, cliVersion string) (*TemplateUpdateResult, erro
 	// Detect stale files based on manifest
 	detectStaleFiles(projectDir, playbook, result)
 
+	// Update agent symlinks if agents are configured in constitution
+	if err := updateAgentSymlinks(projectDir); err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("failed to update agent symlinks: %w", err))
+	}
+
 	// Update template_version in specledger.yaml
 	if err := updateTemplateVersion(projectDir, cliVersion); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("failed to update template_version: %w", err))
@@ -82,6 +91,146 @@ func UpdateTemplates(projectDir, cliVersion string) (*TemplateUpdateResult, erro
 	}
 
 	return result, nil
+}
+
+// updateAgentSymlinks reads selected agents from constitution and recreates symlinks.
+// This is called during template update to ensure agent symlinks are in sync.
+// It migrates all agent directories (not just selected ones) to .agents/ and creates symlinks.
+func updateAgentSymlinks(projectDir string) error {
+	// Read selected agents from constitution for linking
+	constitutionPath := filepath.Join(projectDir, ".specledger", "memory", "constitution.md")
+	content, err := os.ReadFile(constitutionPath)
+	if err != nil {
+		// No constitution file, skip agent symlink update
+		return nil
+	}
+
+	// Parse preferred agent from constitution (format: "- **Preferred Agent**: Claude Code")
+	var selectedAgents []string
+	for _, line := range strings.Split(string(content), "\n") {
+		if strings.Contains(line, "**Preferred Agent**:") {
+			parts := strings.SplitN(line, "**Preferred Agent**:", 2)
+			if len(parts) == 2 {
+				agentName := strings.TrimSpace(parts[1])
+				if agentName != "" && agentName != "None" {
+					// Handle comma-separated list (e.g., "Claude Code, OpenCode")
+					for _, name := range strings.Split(agentName, ",") {
+						name = strings.TrimSpace(name)
+						if name != "" {
+							selectedAgents = append(selectedAgents, name)
+						}
+					}
+				}
+			}
+			break
+		}
+	}
+
+	if len(selectedAgents) == 0 {
+		// No agents selected, skip
+		return nil
+	}
+
+	// Ensure .agents/ directory exists
+	agentsDir := filepath.Join(projectDir, ".agents")
+	sharedCommandsDir := filepath.Join(agentsDir, "commands")
+	sharedSkillsDir := filepath.Join(agentsDir, "skills")
+
+	if err := os.MkdirAll(sharedCommandsDir, 0755); err != nil {
+		return fmt.Errorf("failed to create .agents/commands: %w", err)
+	}
+	if err := os.MkdirAll(sharedSkillsDir, 0755); err != nil {
+		return fmt.Errorf("failed to create .agents/skills: %w", err)
+	}
+
+	// Migrate ALL agent directories to .agents/ (not just selected ones)
+	// This ensures we don't leave orphaned directories when switching agents
+	for _, ag := range agent.All() {
+		// Skip agents without a config dir or with special dirs (like .github)
+		if ag.ConfigDir == "" || ag.ConfigDir == ".github" {
+			continue
+		}
+
+		agentDir := filepath.Join(projectDir, ag.ConfigDir)
+		agentCommandsDir := filepath.Join(agentDir, "commands")
+		agentSkillsDir := filepath.Join(agentDir, "skills")
+
+		// Migrate commands if it's a real directory (not symlink)
+		if fi, err := os.Lstat(agentCommandsDir); err == nil && fi.Mode()&os.ModeSymlink == 0 {
+			entries, err := os.ReadDir(agentCommandsDir)
+			if err == nil {
+				for _, entry := range entries {
+					src := filepath.Join(agentCommandsDir, entry.Name())
+					dst := filepath.Join(sharedCommandsDir, entry.Name())
+					if _, err := os.Stat(dst); os.IsNotExist(err) {
+						// Best effort copy - ignore errors
+						_ = copyFileOrDir(src, dst)
+					}
+				}
+			}
+		}
+
+		// Migrate skills if it's a real directory (not symlink)
+		if fi, err := os.Lstat(agentSkillsDir); err == nil && fi.Mode()&os.ModeSymlink == 0 {
+			entries, err := os.ReadDir(agentSkillsDir)
+			if err == nil {
+				for _, entry := range entries {
+					src := filepath.Join(agentSkillsDir, entry.Name())
+					dst := filepath.Join(sharedSkillsDir, entry.Name())
+					if _, err := os.Stat(dst); os.IsNotExist(err) {
+						// Best effort copy - ignore errors
+						_ = copyFileOrDir(src, dst)
+					}
+				}
+			}
+		}
+	}
+
+	// Link each selected agent to shared directories
+	return playbooks.LinkAgentToShared(projectDir, selectedAgents, true)
+}
+
+// copyFileOrDir copies a file or directory from src to dst.
+func copyFileOrDir(src, dst string) error {
+	info, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+
+	if info.IsDir() {
+		return copyDir(src, dst)
+	}
+	return copyFile(src, dst)
+}
+
+// copyDir recursively copies a directory.
+func copyDir(src, dst string) error {
+	if err := os.MkdirAll(dst, 0755); err != nil {
+		return err
+	}
+
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		srcPath := filepath.Join(src, entry.Name())
+		dstPath := filepath.Join(dst, entry.Name())
+		if err := copyFileOrDir(srcPath, dstPath); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// copyFile copies a single file.
+func copyFile(src, dst string) error {
+	content, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(dst, content, 0644)
 }
 
 // updateTemplateVersion updates the template_version field in specledger.yaml.

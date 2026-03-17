@@ -34,17 +34,22 @@ func DefaultAgentConfig() *AgentConfig {
 }
 
 type Config struct {
-	DefaultProjectDir  string                  `yaml:"default_project_dir" json:"default_project_dir"`
-	PreferredShell     string                  `yaml:"preferred_shell" json:"preferred_shell"`
-	TUIEnabled         bool                    `yaml:"tui_enabled" json:"tui_enabled"`
-	AutoInstallDeps    bool                    `yaml:"auto_install_deps" json:"auto_install_deps"`
-	FallbackToPlainCLI bool                    `yaml:"fallback_to_plain_cli" json:"fallback_to_plain_cli"`
-	LogLevel           string                  `yaml:"log_level" json:"log_level"`
-	Theme              string                  `yaml:"theme" json:"theme"`
-	Language           string                  `yaml:"language" json:"language"`
-	Agent              *AgentConfig            `yaml:"agent,omitempty" json:"agent,omitempty"`
-	Profiles           map[string]*AgentConfig `yaml:"profiles,omitempty" json:"profiles,omitempty"`
-	ActiveProfile      string                  `yaml:"active-profile,omitempty" json:"active_profile,omitempty"`
+	DefaultProjectDir  string `yaml:"default_project_dir" json:"default_project_dir"`
+	PreferredShell     string `yaml:"preferred_shell" json:"preferred_shell"`
+	TUIEnabled         bool   `yaml:"tui_enabled" json:"tui_enabled"`
+	AutoInstallDeps    bool   `yaml:"auto_install_deps" json:"auto_install_deps"`
+	FallbackToPlainCLI bool   `yaml:"fallback_to_plain_cli" json:"fallback_to_plain_cli"`
+	LogLevel           string `yaml:"log_level" json:"log_level"`
+	Theme              string `yaml:"theme" json:"theme"`
+	Language           string `yaml:"language" json:"language"`
+
+	// NEW: Namespaced agent config
+	Agents *ConfigAgents `yaml:"agents,omitempty" json:"agents,omitempty"`
+
+	// DEPRECATED: Keep for backward compatibility during migration
+	Agent         *AgentConfig            `yaml:"agent,omitempty" json:"agent,omitempty"`
+	Profiles      map[string]*AgentConfig `yaml:"profiles,omitempty" json:"profiles,omitempty"`
+	ActiveProfile string                  `yaml:"active-profile,omitempty" json:"active_profile,omitempty"`
 }
 
 // DefaultConfig returns the default configuration
@@ -58,6 +63,7 @@ func DefaultConfig() *Config {
 		LogLevel:           "debug",
 		Theme:              "default",
 		Language:           "en",
+		Agents:             NewConfigAgents(),
 		Agent:              DefaultAgentConfig(),
 		Profiles:           make(map[string]*AgentConfig),
 	}
@@ -89,6 +95,9 @@ func Load() (*Config, error) {
 	}
 	if cfg.LogLevel == "" {
 		cfg.LogLevel = "debug"
+	}
+	if cfg.Agents == nil {
+		cfg.Agents = NewConfigAgents()
 	}
 	if cfg.Agent == nil {
 		cfg.Agent = DefaultAgentConfig()
